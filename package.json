@@ -1,0 +1,23 @@
+{
+    "name": "@umerx/umerx-blackdog-configurator-client-typescript",
+    "private": false,
+    "version": "0.0.4",
+    "main": "build/index.js",
+    "types": "build/index.d.ts",
+    "type": "module",
+    "files": [
+        "build"
+    ],
+    "scripts": {
+        "build": "npx tsc",
+        "build:watch": "npx tsc -w",
+        "dev:update:umerx:types": "npm cache clean --force && npm update @umerx/umerx-blackdog-configurator-client-typescript"
+    },
+    "dependencies": {
+        "@umerx/umerx-blackdog-configurator-client-typescript": "*"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.16",
+        "typescript": "^5.3.3"
+    }
+}
