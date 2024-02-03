@@ -1,5 +1,6 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
 import { AlpacaClient, AlpacaStream } from '@umerx/alpaca';
+import { StrategyTemplateSeaDogDiscountScheme as StrategyTemplateSeaDogDiscountSchemeTypes } from '@umerx/umerx-blackdog-configurator-types-typescript';
 
 const alpacaClientCredentialsKey =
     process.env.ALPACA_CLIENT_CREDENTIALS_KEY ?? '';
@@ -33,8 +34,17 @@ const blackdogBlackdogConfiguratorClient =
         blackdogBlackdogConfiguratorClientBaseUrl
     );
 
-const account = await alpacaClient.getAccount();
-
-console.log(JSON.stringify(account, null, 2));
-const symbols = await blackdogBlackdogConfiguratorClient.symbol().getMany({});
-console.log(JSON.stringify(symbols, null, 2));
+const responseStrategyTemplateSeaDogDiscountSchemeActive =
+    await blackdogBlackdogConfiguratorClient
+        .strategyTemplateSeaDogDiscountScheme()
+        .getMany({ status: 'active' });
+for (const strategyTemplateSeaDogDiscountScheme of responseStrategyTemplateSeaDogDiscountSchemeActive) {
+    executeStrategyTemplateSeaDogDiscountScheme(
+        strategyTemplateSeaDogDiscountScheme
+    );
+}
+function executeStrategyTemplateSeaDogDiscountScheme(
+    strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance
+) {
+    console.log(strategyTemplateSeaDogDiscountScheme);
+}
