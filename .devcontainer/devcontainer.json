@@ -1,7 +1,12 @@
 {
     "name": "umerx-blackdog-trader-typescript",
-    "image": "node:20",
-	"runArgs": ["--env-file",".env"], // Add this line
+	"dockerComposeFile": [
+		"../docker-compose.yml",
+		"docker-compose.yml"
+	],
+	"service": "umerx_blackdog_trader_typescript",
+	"workspaceFolder": "/workspace",
+	"initializeCommand": "docker network create umerx_blackdog || echo 'Already exists'",
     "customizations": {
 		"vscode": {
 			"settings": {
