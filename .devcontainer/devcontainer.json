@@ -1,6 +1,7 @@
 {
     "name": "umerx-blackdog-trader-typescript",
     "image": "node:20",
+	"runArgs": ["--env-file",".env"], // Add this line
     "customizations": {
 		"vscode": {
 			"settings": {

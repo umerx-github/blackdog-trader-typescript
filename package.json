@@ -11,10 +11,12 @@
     "scripts": {
         "build": "npx tsc",
         "build:watch": "npx tsc -w",
-        "dev:update:umerx:types": "npm cache clean --force && npm update @umerx/umerx-blackdog-configurator-client-typescript"
+        "dev:update:umerx:types": "npm cache clean --force && npm update @umerx/umerx-blackdog-configurator-client-typescript",
+        "dev:update:umerx:alpaca": "npm cache clean --force && npm update @umerx/alpaca"
     },
     "dependencies": {
-        "@umerx/umerx-blackdog-configurator-client-typescript": "*"
+        "@umerx/umerx-blackdog-configurator-client-typescript": "*",
+        "@umerx/alpaca": "*"
     },
     "devDependencies": {
         "@types/node": "^20.11.16",
