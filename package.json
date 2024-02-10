@@ -11,6 +11,7 @@
     "scripts": {
         "build": "npx tsc",
         "build:watch": "npx tsc -w",
+        "dev:update:umerx:all": "npm run dev:update:umerx:client && npm run dev:update:umerx:types && npm run dev:update:umerx:alpaca",
         "dev:update:umerx:client": "npm cache clean --force && npm update @umerx/umerx-blackdog-configurator-client-typescript",
         "dev:update:umerx:types": "npm cache clean --force && npm update @umerx/umerx-blackdog-configurator-types-typescript",
         "dev:update:umerx:alpaca": "npm cache clean --force && npm update @umerx/alpaca"

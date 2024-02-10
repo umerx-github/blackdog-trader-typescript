@@ -4,6 +4,7 @@ import {
     StrategyTemplateSeaDogDiscountScheme as StrategyTemplateSeaDogDiscountSchemeTypes,
     Order as OrderTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
+import { copyFileSync } from 'fs';
 
 try {
     const blackdogConfiguratorClientScheme =
@@ -93,6 +94,13 @@ async function resolveOpenOrder(
             blackdogConfiguratorClient.order().fillSingle({
                 id: order.id,
             });
+        } else {
+            await alpacaClient.cancelOrder({
+                order_id: order.alpacaOrderId,
+            });
+            await blackdogConfiguratorClient.order().cancelSingle({
+                id: order.id,
+            });
         }
     } catch (err: any) {
         // Order not found
@@ -102,7 +110,7 @@ async function resolveOpenOrder(
             err.hasOwnProperty('code') &&
             err.code === 40010001
         ) {
-            blackdogConfiguratorClient.order().deleteSingle({
+            blackdogConfiguratorClient.order().cancelSingle({
                 id: order.id,
             });
         }
