@@ -1,10 +1,16 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
-import { AlpacaClient, AlpacaStream } from '@umerx/alpaca';
+import {
+    AlpacaClient,
+    AlpacaStream,
+    BarsV1Timeframe,
+    Bar_v1,
+} from '@umerx/alpaca';
 import {
     StrategyTemplateSeaDogDiscountScheme as StrategyTemplateSeaDogDiscountSchemeTypes,
     Order as OrderTypes,
+    Position as PositionTypes,
+    Symbol as SymbolTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
-import { copyFileSync } from 'fs';
 
 try {
     const blackdogConfiguratorClientScheme =
@@ -51,36 +57,165 @@ function handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(
 ) {
     console.error(err);
 }
+
+function handleFailedResolveOpenOrders(err: any) {
+    console.error(err);
+}
+
+function handleFailedResolveOpenOrder(err: any) {
+    console.error(err);
+}
+
+function handleFailedResolveOpenPositions(err: any) {
+    console.error(err);
+}
+
+function handleFailedResolveOpenPosition(err: any) {
+    console.error(err);
+}
+
 async function executeStrategyTemplateSeaDogDiscountScheme(
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
 ) {
+    const end = new Date();
+    // Alpaca API error if you try to query for recent data: subscription does not permit querying recent SIP data
+    end.setDate(end.getDate() - 1);
+    const start = new Date(end);
+    start.setDate(
+        end.getDate() - strategyTemplateSeaDogDiscountScheme.timeframeInDays
+    );
     const alpacaClient = new AlpacaClient({
         credentials: {
-            key: strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
-            secret: strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
-            paper: strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
+            key: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+                ? process.env.ALPACA_API_KEY ?? ''
+                : strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
+            secret: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+                ? process.env.ALPACA_API_SECRET ?? ''
+                : strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
+            paper: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+                ? Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+                : strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
         },
         rate_limit: true,
     });
     const account = await alpacaClient.getAccount();
-    const accountCashInCents = bankersRounding(account.cash * 100);
-    let availableCashInCents = strategyTemplateSeaDogDiscountScheme.cashInCents;
-    if (accountCashInCents < availableCashInCents) {
-        availableCashInCents = accountCashInCents;
+    console.log(account);
+    // const accountCashInCents = bankersRounding(account.cash * 100);
+    // let availableCashInCents = strategyTemplateSeaDogDiscountScheme.cashInCents;
+    // if (accountCashInCents < availableCashInCents) {
+    //     availableCashInCents = accountCashInCents;
+    // }
+    try {
+        await resolveOpenOrders(
+            alpacaClient,
+            blackdogConfiguratorClient,
+            strategyTemplateSeaDogDiscountScheme
+        );
+    } catch (err) {
+        handleFailedResolveOpenOrders(err);
     }
-    const openOrders = await blackdogConfiguratorClient.order().getMany({
+    const openPositions = await blackdogConfiguratorClient.position().getMany({
         strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
     });
-    for (const openOrder of openOrders) {
-        await resolveOpenOrder(
-            openOrder,
+    // union/distinct
+    const symbolIds = Array.from(
+        new Set([
+            ...strategyTemplateSeaDogDiscountScheme.symbolIds,
+            ...openPositions.map((position) => position.symbolId),
+        ]).values()
+    );
+    const symbols = await blackdogConfiguratorClient.symbol().getMany({
+        ids: symbolIds,
+    });
+    const stockbars = await getStockBars(
+        symbols.map((symbol) => symbol.name),
+        start,
+        end,
+        '1Day',
+        alpacaClient
+    );
+
+    try {
+        await resolveOpenPositions(
+            openPositions,
+            symbols,
+            stockbars,
             alpacaClient,
             blackdogConfiguratorClient
         );
+    } catch (err) {
+        handleFailedResolveOpenPositions(err);
     }
 }
 
+async function getStockBars(
+    symbolNames: string[],
+    start: Date,
+    end: Date,
+    timeframe: BarsV1Timeframe,
+    alpacaClient: AlpacaClient
+) {
+    /*
+    alpacaClient will return data in this shape:
+    {
+        bars: {
+            'AAPL': [],
+            'MSFT': [],
+        },
+        next_page_token: '...',
+    }
+    We need to request all the pages until next_page_token returns null and merge the data into one object where keys are the symbols and values are the bars.
+    */
+    const stockbars = await alpacaClient.getBars_v2({
+        symbols: symbolNames, // 'AAPL,MSFT',
+        start: start,
+        end: end,
+        timeframe: timeframe,
+    });
+
+    while (stockbars.next_page_token !== null) {
+        const nextPageStockbars = await alpacaClient.getBars_v2({
+            symbols: symbolNames, // 'AAPL,MSFT',
+            start: start,
+            end: end,
+            timeframe: timeframe,
+            page_token: stockbars.next_page_token,
+        });
+        for (const symbol in nextPageStockbars.bars) {
+            if (nextPageStockbars.bars.hasOwnProperty(symbol)) {
+                stockbars.bars[symbol] = [
+                    ...(stockbars.bars[symbol] ?? []),
+                    ...nextPageStockbars.bars[symbol],
+                ];
+            }
+        }
+        stockbars.next_page_token = nextPageStockbars.next_page_token;
+    }
+    return stockbars;
+}
+
+async function resolveOpenOrders(
+    alpacaClient: AlpacaClient,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
+    strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance
+) {
+    const openOrders = await blackdogConfiguratorClient.order().getMany({
+        strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
+        status: 'open',
+    });
+    for (const openOrder of openOrders) {
+        try {
+            await resolveOpenOrder(
+                openOrder,
+                alpacaClient,
+                blackdogConfiguratorClient
+            );
+        } catch (err) {
+            handleFailedResolveOpenOrder(err);
+        }
+    }
+}
 async function resolveOpenOrder(
     order: OrderTypes.OrderResponseBodyDataInstance,
     alpacaClient: AlpacaClient,
@@ -115,6 +250,54 @@ async function resolveOpenOrder(
             });
         }
     }
+}
+
+async function resolveOpenPositions(
+    openPositions: PositionTypes.PositionResponseBodyDataInstance[],
+    symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
+    stockbars: {
+        bars: {
+            [symbol: string]: Bar_v1[];
+        };
+        next_page_token: string | null;
+    },
+    alpacaClient: AlpacaClient,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+) {
+    for (const openPosition of openPositions) {
+        try {
+            const symbol = symbols.find(
+                (symbol) => symbol.id === openPosition.symbolId
+            );
+            if (symbol === undefined) {
+                continue;
+            }
+            const bars = stockbars.bars[symbol.name];
+            if (bars === undefined) {
+                continue;
+            }
+            await resolveOpenPosition(
+                openPosition,
+                symbol,
+                bars,
+                alpacaClient,
+                blackdogConfiguratorClient
+            );
+        } catch (err) {
+            handleFailedResolveOpenPosition(err);
+        }
+    }
+}
+
+async function resolveOpenPosition(
+    position: PositionTypes.PositionResponseBodyDataInstance,
+    symbol: SymbolTypes.SymbolResponseBodyDataInstance,
+    bars: Bar_v1,
+    alpacaClient: AlpacaClient,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+) {
+    // log everything
+    console.log({ bars, position, symbol });
 }
 
 function bankersRounding(num: number, decimalPlaces: number = 2): number {
