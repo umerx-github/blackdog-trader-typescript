@@ -3,7 +3,7 @@ import {
     AlpacaClient,
     AlpacaStream,
     BarsV1Timeframe,
-    Bar_v1,
+    Bar_v2,
 } from '@umerx/alpaca';
 import {
     StrategyTemplateSeaDogDiscountScheme as StrategyTemplateSeaDogDiscountSchemeTypes,
@@ -257,7 +257,7 @@ async function resolveOpenPositions(
     symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
     stockbars: {
         bars: {
-            [symbol: string]: Bar_v1[];
+            [symbol: string]: Bar_v2[];
         };
         next_page_token: string | null;
     },
@@ -292,7 +292,7 @@ async function resolveOpenPositions(
 async function resolveOpenPosition(
     position: PositionTypes.PositionResponseBodyDataInstance,
     symbol: SymbolTypes.SymbolResponseBodyDataInstance,
-    bars: Bar_v1,
+    bars: Bar_v2[],
     alpacaClient: AlpacaClient,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
 ) {
