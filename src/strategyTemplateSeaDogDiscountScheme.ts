@@ -27,7 +27,7 @@ try {
             : `:${blackdogConfiguratorClientPort}`
     }${blackdogConfiguratorClientPath}`;
 
-    const blackdogConfiguratorClient =
+    const blackdogConfiguratorClient: BlackdogConfiguratorClient.Client =
         new BlackdogConfiguratorClient.ClientImpl(
             blackdogConfiguratorClientBaseUrl
         );
@@ -79,8 +79,8 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
 ) {
     const end = new Date();
-    // Alpaca API error if you try to query for recent data: subscription does not permit querying recent SIP data
-    end.setDate(end.getDate() - 1);
+    // Alpaca API error if you try to query for recent data: subscription does not permit querying recent SIP data. Subtract 30 minutes
+    end.setTime(end.getTime() - 30 * 60 * 1000);
     const start = new Date(end);
     start.setDate(
         end.getDate() - strategyTemplateSeaDogDiscountScheme.timeframeInDays
@@ -100,12 +100,15 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         rate_limit: true,
     });
     const account = await alpacaClient.getAccount();
-    console.log(account);
-    // const accountCashInCents = bankersRounding(account.cash * 100);
-    // let availableCashInCents = strategyTemplateSeaDogDiscountScheme.cashInCents;
-    // if (accountCashInCents < availableCashInCents) {
-    //     availableCashInCents = accountCashInCents;
-    // }
+    const strategy = await blackdogConfiguratorClient.strategy().getSingle({
+        id: strategyTemplateSeaDogDiscountScheme.strategyId,
+    });
+    const accountCashInCents = bankersRounding(account.cash * 100);
+    if (strategy.cashInCents > accountCashInCents) {
+        throw new Error(
+            `Strategy cashInCents is greater than account cashInCents. Strategy: ${strategy.cashInCents}, Account: ${accountCashInCents}`
+        );
+    }
     try {
         await resolveOpenOrders(
             alpacaClient,
@@ -140,6 +143,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         await resolveOpenPositions(
             openPositions,
             symbols,
+            strategyTemplateSeaDogDiscountScheme,
             stockbars,
             alpacaClient,
             blackdogConfiguratorClient
@@ -255,6 +259,7 @@ async function resolveOpenOrder(
 async function resolveOpenPositions(
     openPositions: PositionTypes.PositionResponseBodyDataInstance[],
     symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
+    strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     stockbars: {
         bars: {
             [symbol: string]: Bar_v2[];
@@ -279,6 +284,7 @@ async function resolveOpenPositions(
             await resolveOpenPosition(
                 openPosition,
                 symbol,
+                strategyTemplateSeaDogDiscountScheme,
                 bars,
                 alpacaClient,
                 blackdogConfiguratorClient
@@ -292,12 +298,52 @@ async function resolveOpenPositions(
 async function resolveOpenPosition(
     position: PositionTypes.PositionResponseBodyDataInstance,
     symbol: SymbolTypes.SymbolResponseBodyDataInstance,
+    strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     bars: Bar_v2[],
     alpacaClient: AlpacaClient,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
 ) {
-    // log everything
-    console.log({ bars, position, symbol });
+    const alpacaPosition = await alpacaClient.getPosition({
+        symbol: symbol.name,
+    });
+    if (position.quantity > alpacaPosition.qty) {
+        throw new Error(
+            `Position quantity is greater than Alpaca position quantity. Symbol: ${symbol.name}, Position: ${position.quantity}, Alpaca: ${alpacaPosition.qty}`
+        );
+    }
+    // Get the last bar
+    const mostRecentBar = bars[bars.length - 1];
+    // Identify how many bars have a price that is lower or equal to the last bar
+    const numberOfBarsWithLowerOrEqualPrice = bars.filter(
+        (bar) => bar.vw <= mostRecentBar.vw
+    ).length;
+    const mostRecentBarPercentile =
+        (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
+    if (
+        mostRecentBarPercentile >
+        strategyTemplateSeaDogDiscountScheme.sellAtPercentile
+    ) {
+        // Sell
+        const order = await alpacaClient.placeOrder({
+            symbol: symbol.name,
+            qty: position.quantity,
+            side: 'sell',
+            type: 'limit',
+            time_in_force: 'day',
+            extended_hours: true,
+            limit_price: mostRecentBar.vw,
+        });
+        await blackdogConfiguratorClient.order().postMany([
+            {
+                strategyId: position.strategyId,
+                symbolId: position.symbolId,
+                alpacaOrderId: order.id,
+                quantity: position.quantity,
+                side: 'sell',
+                averagePriceInCents: bankersRounding(mostRecentBar.vw * 100),
+            },
+        ]);
+    }
 }
 
 function bankersRounding(num: number, decimalPlaces: number = 2): number {
