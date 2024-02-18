@@ -319,9 +319,10 @@ async function resolveOpenPosition(
     ).length;
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
+    const gainPercentage = (bankersRounding(mostRecentBar.vw * 100) / position.averagePriceInCents) * 100;
     if (
         mostRecentBarPercentile >
-        strategyTemplateSeaDogDiscountScheme.sellAtPercentile
+        strategyTemplateSeaDogDiscountScheme.sellAtPercentile && gainPercentage >= strategyTemplateSeaDogDiscountScheme.minimumGainPercent
     ) {
         // Sell
         const order = await alpacaClient.placeOrder({
