@@ -15,6 +15,7 @@ import {
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
 
 try {
+    batchLog('Start');
     const blackdogConfiguratorClientScheme =
         process.env.BLACKDOG_CONFIGURATOR_CLIENT_SCHEME ?? '';
     const blackdogConfiguratorClientHost =
@@ -33,13 +34,15 @@ try {
         new BlackdogConfiguratorClient.ClientImpl(
             blackdogConfiguratorClientBaseUrl
         );
-
+    batchLog('Getting active strategyTemplateSeaDogDiscountScheme');
     const responseStrategyTemplateSeaDogDiscountSchemeActive =
         await blackdogConfiguratorClient
             .strategyTemplateSeaDogDiscountScheme()
             .getMany({ status: 'active' });
+    batchLog(
+        `Got active strategyTemplateSeaDogDiscountScheme: Count: ${responseStrategyTemplateSeaDogDiscountSchemeActive.length}`
+    );
     for (const strategyTemplateSeaDogDiscountScheme of responseStrategyTemplateSeaDogDiscountSchemeActive) {
-        strategyLog(strategyTemplateSeaDogDiscountScheme.strategyId, 'Start');
         executeStrategyTemplateSeaDogDiscountScheme(
             strategyTemplateSeaDogDiscountScheme,
             blackdogConfiguratorClient
@@ -68,6 +71,10 @@ try {
             });
     }
 } catch (err) {
+    handleFailedBatch(err);
+}
+
+function handleFailedBatch(err: any) {
     console.error(err);
 }
 
@@ -108,6 +115,12 @@ function handleFailedResolveOpenSymbol(err: any) {
 
 function strategyLog(strategyId: number, message: string) {
     console.log(`${new Date()}: Strategy ${strategyId}: ${message}`);
+}
+
+function batchLog(message: string) {
+    console.log(
+        `${new Date()}: strategyTemplateSeaDogDiscountScheme: ${message}`
+    );
 }
 
 function handleUnableToCalculatePercentileForBar(err: any) {
@@ -231,7 +244,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             `Resolving open symbols.`
         );
         await resolveOpenSymbols(
-            accountCashInCents,
+            strategy.cashInCents,
             symbols,
             strategyTemplateSeaDogDiscountScheme,
             stockbars,
@@ -548,16 +561,17 @@ async function resolveOpenSymbols(
                 strategyTemplateSeaDogDiscountScheme.strategyId,
                 `Stock current price in dollars: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInDollars}, Stock current price in cents: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`
             );
-            let stockCurrentPriceInCents =
-                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents;
             strategyLog(
                 strategyTemplateSeaDogDiscountScheme.strategyId,
-                `Account cash in cents: ${accountCashInCents}, Stock current price in cents: ${stockCurrentPriceInCents}`
+                `Account cash in cents: ${accountCashInCents}, Stock current price in cents: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`
             );
-            if (accountCashInCents < stockCurrentPriceInCents) {
+            if (
+                accountCashInCents <
+                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+            ) {
                 strategyLog(
                     strategyTemplateSeaDogDiscountScheme.strategyId,
-                    `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${stockCurrentPriceInCents}`
+                    `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`
                 );
                 affordablePriceIndex = i + 1;
                 continue;
@@ -569,7 +583,7 @@ async function resolveOpenSymbols(
                 );
                 const order = await purchaseSymbol(
                     stockbarsForSymbol.symbol.name,
-                    stockCurrentPriceInCents,
+                    stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents,
                     1,
                     alpacaClient
                 );
@@ -583,7 +597,7 @@ async function resolveOpenSymbols(
                         stockbarsForSymbol.symbol.id,
                         order.id,
                         1,
-                        stockCurrentPriceInCents,
+                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents,
                         blackdogConfiguratorClient
                     );
                 } catch (err) {
@@ -605,12 +619,14 @@ async function resolveOpenSymbols(
                             strategyTemplateSeaDogDiscountScheme.strategyId,
                             `Failed to cancel order. Order: ${
                                 order.id
-                            }. Decreasing account cash in cents: ${accountCashInCents} - ${stockCurrentPriceInCents} = ${
-                                accountCashInCents - stockCurrentPriceInCents
+                            }. Decreasing account cash in cents: ${accountCashInCents} - ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents} = ${
+                                accountCashInCents -
+                                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
                             }`
                         );
                         accountCashInCents = bankersRoundingTruncateToInt(
-                            accountCashInCents - stockCurrentPriceInCents
+                            accountCashInCents -
+                                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
                         );
                         throw err;
                     }
@@ -618,12 +634,14 @@ async function resolveOpenSymbols(
                 }
                 strategyLog(
                     strategyTemplateSeaDogDiscountScheme.strategyId,
-                    `Decreasing account cash in cents: ${accountCashInCents} - ${stockCurrentPriceInCents} = ${
-                        accountCashInCents - stockCurrentPriceInCents
+                    `Decreasing account cash in cents: ${accountCashInCents} - ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents} = ${
+                        accountCashInCents -
+                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
                     }`
                 );
                 accountCashInCents = bankersRoundingTruncateToInt(
-                    accountCashInCents - stockCurrentPriceInCents
+                    accountCashInCents -
+                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
                 );
             } catch (err) {
                 handleFailedResolveOpenSymbol(err);
@@ -656,7 +674,7 @@ async function purchaseSymbol(
         type: 'limit',
         time_in_force: 'day',
         extended_hours: true,
-        limit_price: bankersRoundingTruncateToInt(priceInCents / 100),
+        limit_price: bankersRounding(priceInCents / 100),
     });
 }
 
