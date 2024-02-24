@@ -6,6 +6,7 @@ import {
     Bar_v2,
 } from '@umerx/alpaca';
 import {
+    Strategy as StrategyTypes,
     StrategyTemplateSeaDogDiscountScheme as StrategyTemplateSeaDogDiscountSchemeTypes,
     Order as OrderTypes,
     Position as PositionTypes,
@@ -71,6 +72,14 @@ function handleFailedResolveOpenPositions(err: any) {
 }
 
 function handleFailedResolveOpenPosition(err: any) {
+    console.error(err);
+}
+
+function handleFailedResolveOpenSymbols(err: any) {
+    console.error(err);
+}
+
+function handleFailedResolveOpenSymbol(err: any) {
     console.error(err);
 }
 
@@ -150,6 +159,19 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         );
     } catch (err) {
         handleFailedResolveOpenPositions(err);
+    }
+
+    try {
+        await resolveOpenSymbols(
+            openPositions,
+            symbols,
+            strategyTemplateSeaDogDiscountScheme,
+            stockbars,
+            alpacaClient,
+            blackdogConfiguratorClient
+        );
+    } catch (err) {
+        handleFailedResolveOpenSymbols(err);
     }
 }
 
@@ -319,10 +341,15 @@ async function resolveOpenPosition(
     ).length;
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
-    const gainPercentage = (bankersRounding(mostRecentBar.vw * 100) / position.averagePriceInCents) * 100;
+    const gainPercentage =
+        (bankersRounding(mostRecentBar.vw * 100) /
+            position.averagePriceInCents) *
+        100;
     if (
         mostRecentBarPercentile >
-        strategyTemplateSeaDogDiscountScheme.sellAtPercentile && gainPercentage >= strategyTemplateSeaDogDiscountScheme.minimumGainPercent
+            strategyTemplateSeaDogDiscountScheme.sellAtPercentile &&
+        gainPercentage >=
+            strategyTemplateSeaDogDiscountScheme.minimumGainPercent
     ) {
         // Sell
         const order = await alpacaClient.placeOrder({
@@ -345,6 +372,123 @@ async function resolveOpenPosition(
             },
         ]);
     }
+}
+
+async function resolveOpenSymbols(
+    openPositions: PositionTypes.PositionResponseBodyDataInstance[],
+    symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
+    strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
+    stockbars: {
+        bars: {
+            [symbol: string]: Bar_v2[];
+        };
+        next_page_token: string | null;
+    },
+    alpacaClient: AlpacaClient,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+) {
+    // TODO
+    const stockbarsForSymbols: {
+        symbol: SymbolTypes.SymbolResponseBodyDataInstance;
+        bars: Bar_v2[];
+    }[] = [];
+    for (const symbol of symbols) {
+        const bars = stockbars.bars[symbol.name];
+        if (bars === undefined) {
+            continue;
+        }
+        const mostRecentBar = bars[bars.length - 1];
+        const numberOfBarsWithLowerOrEqualPrice = bars.filter(
+            (bar) => bar.vw <= mostRecentBar.vw
+        ).length;
+        const mostRecentBarPercentile =
+            (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
+        if (
+            mostRecentBarPercentile <=
+            strategyTemplateSeaDogDiscountScheme.buyAtPercentile
+        ) {
+            stockbarsForSymbols.push({
+                symbol: symbol,
+                bars: bars,
+            });
+        }
+    }
+    // -   [ ]Reverse sort stockbarsForSymbols by last bar volume weighted price
+    stockbarsForSymbols.sort((a, b) => {
+        const aLastBar = a.bars[a.bars.length - 1];
+        const bLastBar = b.bars[b.bars.length - 1];
+        return bLastBar.vw - aLastBar.vw;
+    });
+    // -   [ ] Identify stockbarsForSymbols with lowest price
+    const lowestPriceSymbol =
+        stockbarsForSymbols[stockbarsForSymbols.length - 1];
+    let account = await alpacaClient.getAccount();
+    let strategy = await blackdogConfiguratorClient.strategy().getSingle({
+        id: strategyTemplateSeaDogDiscountScheme.strategyId,
+    });
+    let accountCashInCents = bankersRounding(account.cash * 100);
+    const lowestPriceSymbolCashInCents = bankersRounding(
+        lowestPriceSymbol.bars[lowestPriceSymbol.bars.length - 1].vw * 100
+    );
+    if (strategy.cashInCents > accountCashInCents) {
+        throw new Error(
+            `Strategy cashInCents is greater than account cashInCents. Strategy: ${strategy.cashInCents}, Account: ${accountCashInCents}`
+        );
+    }
+    // -   [ ] While cash is greater than price of cheapest symbol
+    while (accountCashInCents > lowestPriceSymbolCashInCents) {
+        //     -   [ ] Set variable affordablePriceIndex to track index of most exensive yet affordable symbol
+        let affordablePriceIndex = 0;
+        //     -   [ ] Loop through i = affordablePriceIndex > 0 ? affordablePriceIndex : 0 to symbols.length
+        for (
+            let i = affordablePriceIndex > 0 ? affordablePriceIndex : 0;
+            i < stockbarsForSymbols.length;
+            i++
+        ) {
+            //         -   [ ] if cash < stockbarsForSymbols[i].priceInCents
+            let stockCurrentPriceInCents = bankersRounding(
+                stockbarsForSymbols[i].bars[
+                    stockbarsForSymbols[i].bars.length - 1
+                ].vw * 100
+            );
+            if (accountCashInCents < stockCurrentPriceInCents) {
+                //             -   [ ] affordablePriceIndex = i + 1
+                affordablePriceIndex = i + 1;
+                //             -   [ ] continue
+                continue;
+            }
+            // Get the last bar
+
+            //         -   [ ] If stockbarsForSymbols[i].shouldBuy
+            //             -   [ ] Purchase stockbarsForSymbols[i]
+            const order = await alpacaClient.placeOrder({
+                symbol: stockbarsForSymbols[i].symbol.name,
+                qty: 1,
+                side: 'buy',
+                type: 'limit',
+                time_in_force: 'day',
+                extended_hours: true,
+                limit_price: bankersRounding(stockCurrentPriceInCents * 100),
+            });
+            await blackdogConfiguratorClient.order().postMany([
+                {
+                    strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
+                    symbolId: stockbarsForSymbols[i].symbol.id,
+                    alpacaOrderId: order.id,
+                    quantity: 1,
+                    side: 'buy',
+                    averagePriceInCents: stockCurrentPriceInCents,
+                },
+            ]);
+            accountCashInCents = bankersRounding(
+                accountCashInCents - stockCurrentPriceInCents
+            );
+        }
+    }
+}
+
+async function resolveOpenSymbol() {
+    // TODO
 }
 
 function bankersRounding(num: number, decimalPlaces: number = 2): number {
