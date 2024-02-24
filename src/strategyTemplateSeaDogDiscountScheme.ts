@@ -4,6 +4,7 @@ import {
     AlpacaStream,
     BarsV1Timeframe,
     Bar_v2,
+    Order,
 } from '@umerx/alpaca';
 import {
     Strategy as StrategyTypes,
@@ -38,15 +39,33 @@ try {
             .strategyTemplateSeaDogDiscountScheme()
             .getMany({ status: 'active' });
     for (const strategyTemplateSeaDogDiscountScheme of responseStrategyTemplateSeaDogDiscountSchemeActive) {
+        strategyLog(strategyTemplateSeaDogDiscountScheme.strategyId, 'Start');
         executeStrategyTemplateSeaDogDiscountScheme(
             strategyTemplateSeaDogDiscountScheme,
             blackdogConfiguratorClient
-        ).catch((err) => {
-            handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(
-                strategyTemplateSeaDogDiscountScheme,
-                err
-            );
-        });
+        )
+            .then(() => {
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    'Success'
+                );
+            })
+            .catch((err) => {
+                handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(
+                    strategyTemplateSeaDogDiscountScheme,
+                    err
+                );
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    'Failed'
+                );
+            })
+            .finally(() => {
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    'End'
+                );
+            });
     }
 } catch (err) {
     console.error(err);
@@ -56,7 +75,11 @@ function handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     err: any
 ) {
-    console.error(err);
+    console.error(
+        `${new Date()}: Strategy ${
+            strategyTemplateSeaDogDiscountScheme.strategyId
+        }: Error: ${err.code} ${err.message}`
+    );
 }
 
 function handleFailedResolveOpenOrders(err: any) {
@@ -83,6 +106,14 @@ function handleFailedResolveOpenSymbol(err: any) {
     console.error(err);
 }
 
+function strategyLog(strategyId: number, message: string) {
+    console.log(`${new Date()}: Strategy ${strategyId}: ${message}`);
+}
+
+function handleUnableToCalculatePercentileForBar(err: any) {
+    console.error(err);
+}
+
 async function executeStrategyTemplateSeaDogDiscountScheme(
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
@@ -94,31 +125,48 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     start.setDate(
         end.getDate() - strategyTemplateSeaDogDiscountScheme.timeframeInDays
     );
+    const credentials = {
+        key: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+            ? process.env.ALPACA_API_KEY ?? ''
+            : strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
+        secret: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+            ? process.env.ALPACA_API_SECRET ?? ''
+            : strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
+        paper: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+            ? Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
+            : strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
+    };
     const alpacaClient = new AlpacaClient({
-        credentials: {
-            key: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-                ? process.env.ALPACA_API_KEY ?? ''
-                : strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
-            secret: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-                ? process.env.ALPACA_API_SECRET ?? ''
-                : strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
-            paper: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-                ? Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-                : strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
-        },
+        credentials: credentials,
         rate_limit: true,
     });
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Credentials: ${JSON.stringify(credentials)}`
+    );
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Getting account information.`
+    );
     const account = await alpacaClient.getAccount();
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Getting strategy information.`
+    );
     const strategy = await blackdogConfiguratorClient.strategy().getSingle({
         id: strategyTemplateSeaDogDiscountScheme.strategyId,
     });
-    const accountCashInCents = bankersRounding(account.cash * 100);
+    const accountCashInCents = bankersRoundingTruncateToInt(account.cash * 100);
     if (strategy.cashInCents > accountCashInCents) {
         throw new Error(
             `Strategy cashInCents is greater than account cashInCents. Strategy: ${strategy.cashInCents}, Account: ${accountCashInCents}`
         );
     }
     try {
+        strategyLog(
+            strategyTemplateSeaDogDiscountScheme.strategyId,
+            `Resolving open orders.`
+        );
         await resolveOpenOrders(
             alpacaClient,
             blackdogConfiguratorClient,
@@ -127,6 +175,10 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     } catch (err) {
         handleFailedResolveOpenOrders(err);
     }
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Getting open positions.`
+    );
     const openPositions = await blackdogConfiguratorClient.position().getMany({
         strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
     });
@@ -137,9 +189,17 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             ...openPositions.map((position) => position.symbolId),
         ]).values()
     );
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Getting symbols.`
+    );
     const symbols = await blackdogConfiguratorClient.symbol().getMany({
         ids: symbolIds,
     });
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Getting bars for symbols.`
+    );
     const stockbars = await getStockBars(
         symbols.map((symbol) => symbol.name),
         start,
@@ -149,6 +209,10 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     );
 
     try {
+        strategyLog(
+            strategyTemplateSeaDogDiscountScheme.strategyId,
+            `Resolving open positions.`
+        );
         await resolveOpenPositions(
             openPositions,
             symbols,
@@ -162,8 +226,12 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     }
 
     try {
+        strategyLog(
+            strategyTemplateSeaDogDiscountScheme.strategyId,
+            `Resolving open symbols.`
+        );
         await resolveOpenSymbols(
-            openPositions,
+            accountCashInCents,
             symbols,
             strategyTemplateSeaDogDiscountScheme,
             stockbars,
@@ -339,10 +407,15 @@ async function resolveOpenPosition(
     const numberOfBarsWithLowerOrEqualPrice = bars.filter(
         (bar) => bar.vw <= mostRecentBar.vw
     ).length;
+    const mostRecentBarVolumeWeightedAveragePriceInDollars = mostRecentBar.vw;
+    const mostRecentBarVolumeWeightedAveragePriceInCents =
+        bankersRoundingTruncateToInt(
+            mostRecentBarVolumeWeightedAveragePriceInDollars * 100
+        );
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
     const gainPercentage =
-        (bankersRounding(mostRecentBar.vw * 100) /
+        (mostRecentBarVolumeWeightedAveragePriceInCents /
             position.averagePriceInCents) *
         100;
     if (
@@ -359,7 +432,7 @@ async function resolveOpenPosition(
             type: 'limit',
             time_in_force: 'day',
             extended_hours: true,
-            limit_price: mostRecentBar.vw,
+            limit_price: mostRecentBarVolumeWeightedAveragePriceInDollars,
         });
         await blackdogConfiguratorClient.order().postMany([
             {
@@ -368,14 +441,15 @@ async function resolveOpenPosition(
                 alpacaOrderId: order.id,
                 quantity: position.quantity,
                 side: 'sell',
-                averagePriceInCents: bankersRounding(mostRecentBar.vw * 100),
+                averagePriceInCents:
+                    mostRecentBarVolumeWeightedAveragePriceInCents,
             },
         ]);
     }
 }
 
 async function resolveOpenSymbols(
-    openPositions: PositionTypes.PositionResponseBodyDataInstance[],
+    accountCashInCents: number,
     symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     stockbars: {
@@ -393,102 +467,221 @@ async function resolveOpenSymbols(
         bars: Bar_v2[];
     }[] = [];
     for (const symbol of symbols) {
-        const bars = stockbars.bars[symbol.name];
-        if (bars === undefined) {
-            continue;
-        }
-        const mostRecentBar = bars[bars.length - 1];
-        const numberOfBarsWithLowerOrEqualPrice = bars.filter(
-            (bar) => bar.vw <= mostRecentBar.vw
-        ).length;
-        const mostRecentBarPercentile =
-            (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
-        if (
-            mostRecentBarPercentile <=
-            strategyTemplateSeaDogDiscountScheme.buyAtPercentile
-        ) {
-            stockbarsForSymbols.push({
-                symbol: symbol,
-                bars: bars,
-            });
+        try {
+            const bars = stockbars.bars[symbol.name];
+            if (bars === undefined) {
+                throw new Error(
+                    `Bars not found for symbol: ${symbol.name}, Bars: ${bars}`
+                );
+            }
+            const mostRecentBar = bars[bars.length - 1];
+            const numberOfBarsWithLowerOrEqualPrice = bars.filter(
+                (bar) => bar.vw <= mostRecentBar.vw
+            ).length;
+            const mostRecentBarPercentile =
+                (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
+            if (
+                mostRecentBarPercentile <=
+                strategyTemplateSeaDogDiscountScheme.buyAtPercentile
+            ) {
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    `Symbol ${symbol.name} is in the buy percentile. BuyAtPercentile: ${strategyTemplateSeaDogDiscountScheme.buyAtPercentile}. Percentile: ${mostRecentBarPercentile}`
+                );
+                stockbarsForSymbols.push({
+                    symbol: symbol,
+                    bars: bars,
+                });
+            } else {
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    `Symbol ${symbol.name} is not in the buy percentile. BuyAtPercentile: ${strategyTemplateSeaDogDiscountScheme.buyAtPercentile}. Percentile: ${mostRecentBarPercentile}`
+                );
+            }
+        } catch (err) {
+            handleUnableToCalculatePercentileForBar(err);
         }
     }
-    // -   [ ]Reverse sort stockbarsForSymbols by last bar volume weighted price
+    if (stockbarsForSymbols.length === 0) {
+        strategyLog(
+            strategyTemplateSeaDogDiscountScheme.strategyId,
+            `No symbols are in the buy percentile.`
+        );
+        return;
+    }
     stockbarsForSymbols.sort((a, b) => {
         const aLastBar = a.bars[a.bars.length - 1];
         const bLastBar = b.bars[b.bars.length - 1];
         return bLastBar.vw - aLastBar.vw;
     });
-    // -   [ ] Identify stockbarsForSymbols with lowest price
     const lowestPriceSymbol =
         stockbarsForSymbols[stockbarsForSymbols.length - 1];
-    let account = await alpacaClient.getAccount();
-    let strategy = await blackdogConfiguratorClient.strategy().getSingle({
-        id: strategyTemplateSeaDogDiscountScheme.strategyId,
-    });
-    let accountCashInCents = bankersRounding(account.cash * 100);
-    const lowestPriceSymbolCashInCents = bankersRounding(
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Lowest price symbol: ${lowestPriceSymbol.symbol.name}`
+    );
+    const lowestPriceSymbolCashInCents = bankersRoundingTruncateToInt(
         lowestPriceSymbol.bars[lowestPriceSymbol.bars.length - 1].vw * 100
     );
-    if (strategy.cashInCents > accountCashInCents) {
-        throw new Error(
-            `Strategy cashInCents is greater than account cashInCents. Strategy: ${strategy.cashInCents}, Account: ${accountCashInCents}`
-        );
-    }
-    // -   [ ] While cash is greater than price of cheapest symbol
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Account cash in cents: ${accountCashInCents}, Lowest price symbol cash in cents: ${lowestPriceSymbolCashInCents}`
+    );
     while (accountCashInCents > lowestPriceSymbolCashInCents) {
-        //     -   [ ] Set variable affordablePriceIndex to track index of most exensive yet affordable symbol
         let affordablePriceIndex = 0;
-        //     -   [ ] Loop through i = affordablePriceIndex > 0 ? affordablePriceIndex : 0 to symbols.length
         for (
             let i = affordablePriceIndex > 0 ? affordablePriceIndex : 0;
             i < stockbarsForSymbols.length;
             i++
         ) {
-            //         -   [ ] if cash < stockbarsForSymbols[i].priceInCents
-            let stockCurrentPriceInCents = bankersRounding(
-                stockbarsForSymbols[i].bars[
-                    stockbarsForSymbols[i].bars.length - 1
-                ].vw * 100
+            const stockbarsForSymbol = stockbarsForSymbols[i];
+            const stockbarsForSymbolMostRecentBar =
+                stockbarsForSymbol.bars[stockbarsForSymbol.bars.length - 1];
+            const stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInDollars =
+                stockbarsForSymbolMostRecentBar.vw;
+            const stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents =
+                bankersRoundingTruncateToInt(
+                    stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInDollars *
+                        100
+                );
+            strategyLog(
+                strategyTemplateSeaDogDiscountScheme.strategyId,
+                `Stock current price in dollars: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInDollars}, Stock current price in cents: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`
+            );
+            let stockCurrentPriceInCents =
+                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents;
+            strategyLog(
+                strategyTemplateSeaDogDiscountScheme.strategyId,
+                `Account cash in cents: ${accountCashInCents}, Stock current price in cents: ${stockCurrentPriceInCents}`
             );
             if (accountCashInCents < stockCurrentPriceInCents) {
-                //             -   [ ] affordablePriceIndex = i + 1
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${stockCurrentPriceInCents}`
+                );
                 affordablePriceIndex = i + 1;
-                //             -   [ ] continue
                 continue;
             }
-            // Get the last bar
-
-            //         -   [ ] If stockbarsForSymbols[i].shouldBuy
-            //             -   [ ] Purchase stockbarsForSymbols[i]
-            const order = await alpacaClient.placeOrder({
-                symbol: stockbarsForSymbols[i].symbol.name,
-                qty: 1,
-                side: 'buy',
-                type: 'limit',
-                time_in_force: 'day',
-                extended_hours: true,
-                limit_price: bankersRounding(stockCurrentPriceInCents * 100),
-            });
-            await blackdogConfiguratorClient.order().postMany([
-                {
-                    strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
-                    symbolId: stockbarsForSymbols[i].symbol.id,
-                    alpacaOrderId: order.id,
-                    quantity: 1,
-                    side: 'buy',
-                    averagePriceInCents: stockCurrentPriceInCents,
-                },
-            ]);
-            accountCashInCents = bankersRounding(
-                accountCashInCents - stockCurrentPriceInCents
-            );
+            try {
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    `Purchasing symbol: ${stockbarsForSymbol.symbol.name}`
+                );
+                const order = await purchaseSymbol(
+                    stockbarsForSymbol.symbol.name,
+                    stockCurrentPriceInCents,
+                    1,
+                    alpacaClient
+                );
+                try {
+                    strategyLog(
+                        strategyTemplateSeaDogDiscountScheme.strategyId,
+                        `Adding order to configurator.`
+                    );
+                    await addOrderToConfigurator(
+                        strategyTemplateSeaDogDiscountScheme.strategyId,
+                        stockbarsForSymbol.symbol.id,
+                        order.id,
+                        1,
+                        stockCurrentPriceInCents,
+                        blackdogConfiguratorClient
+                    );
+                } catch (err) {
+                    try {
+                        strategyLog(
+                            strategyTemplateSeaDogDiscountScheme.strategyId,
+                            `Failed to add order to configurator. Canceling order: ${order.id}`
+                        );
+                        const canceled = alpacaClient.cancelOrder({
+                            order_id: order.id,
+                        });
+                        if (!canceled) {
+                            throw new Error(
+                                `Failed to cancel order. Order: ${order.id}`
+                            );
+                        }
+                    } catch (err) {
+                        strategyLog(
+                            strategyTemplateSeaDogDiscountScheme.strategyId,
+                            `Failed to cancel order. Order: ${
+                                order.id
+                            }. Decreasing account cash in cents: ${accountCashInCents} - ${stockCurrentPriceInCents} = ${
+                                accountCashInCents - stockCurrentPriceInCents
+                            }`
+                        );
+                        accountCashInCents = bankersRoundingTruncateToInt(
+                            accountCashInCents - stockCurrentPriceInCents
+                        );
+                        throw err;
+                    }
+                    throw err;
+                }
+                strategyLog(
+                    strategyTemplateSeaDogDiscountScheme.strategyId,
+                    `Decreasing account cash in cents: ${accountCashInCents} - ${stockCurrentPriceInCents} = ${
+                        accountCashInCents - stockCurrentPriceInCents
+                    }`
+                );
+                accountCashInCents = bankersRoundingTruncateToInt(
+                    accountCashInCents - stockCurrentPriceInCents
+                );
+            } catch (err) {
+                handleFailedResolveOpenSymbol(err);
+                continue;
+            }
         }
     }
+    strategyLog(
+        strategyTemplateSeaDogDiscountScheme.strategyId,
+        `Updating account cash in cents: ${accountCashInCents}`
+    );
+    await blackdogConfiguratorClient.strategy().patchSingle(
+        { id: strategyTemplateSeaDogDiscountScheme.strategyId },
+        {
+            cashInCents: accountCashInCents,
+        }
+    );
 }
 
-async function resolveOpenSymbol() {
-    // TODO
+async function purchaseSymbol(
+    symbolName: string,
+    priceInCents: number,
+    quantity: number,
+    alpacaClient: AlpacaClient
+): Promise<Order> {
+    return await alpacaClient.placeOrder({
+        symbol: symbolName,
+        qty: quantity,
+        side: 'buy',
+        type: 'limit',
+        time_in_force: 'day',
+        extended_hours: true,
+        limit_price: bankersRoundingTruncateToInt(priceInCents / 100),
+    });
+}
+
+async function addOrderToConfigurator(
+    strategyId: number,
+    symbolId: number,
+    alpacaOrderId: string,
+    quantity: number,
+    priceInCents: number,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+) {
+    await blackdogConfiguratorClient.order().postMany([
+        {
+            strategyId: strategyId,
+            symbolId: symbolId,
+            alpacaOrderId: alpacaOrderId,
+            quantity: quantity,
+            side: 'buy',
+            averagePriceInCents: priceInCents,
+        },
+    ]);
+}
+
+function bankersRoundingTruncateToInt(num: number): number {
+    return bankersRounding(num, 0);
 }
 
 function bankersRounding(num: number, decimalPlaces: number = 2): number {

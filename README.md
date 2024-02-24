@@ -11,15 +11,18 @@
 -   [x] Add averagePriceInCents to Order Controller
     -   [x] When filling an order, update the averagePriceInCents of the position
 -   [x] Add logic for resolveOpenPosition to only sell if also greater than minimumGainPercent
--   [ ] Add logic for resolveSymbol (maybe purchase)
-    -   [ ] Sort the symbols by highest price first, lowest price last
-    -   [ ] Identify the cheapest symbol
-    -   [ ] While cash is greater than price of cheapest symbol
-        -   [ ] Set variable priceIndex to track index of most exensive yet affordable symbol
-        -   [ ] Loop through i = priceIndex > 0 ? priceIndex : 0 to symbols.length
-            -   [ ] if cash < symbols[i].priceInCents
-                -   [ ] priceIndex = i + 1
-                -   [ ] continue
-            -   [ ] If symbols[i].shouldBuy
-                -   [ ] Purchase symbols[i]
+-   [x] Add logic for resolveSymbol (maybe purchase)
+    -   [x] Sort the symbols by highest price first, lowest price last
+    -   [x] Identify the cheapest symbol
+    -   [x] While cash is greater than price of cheapest symbol
+        -   [x] Set variable priceIndex to track index of most exensive yet affordable symbol
+        -   [x] Loop through i = priceIndex > 0 ? priceIndex : 0 to symbols.length
+            -   [x] if cash < symbols[i].priceInCents
+                -   [x] priceIndex = i + 1
+                -   [x] continue
+            -   [x] If symbols[i].shouldBuy
+                -   [x] Purchase symbols[i]
+-   [x] Encapsulate the logic for handling a single symbol into a function
+-   [x] Handle error if a single symbol purchase fails (move on)
+-   [ ] Automatically adjust Strategy cash if it is less than the available cash
 -   [ ] Encapsulate the symbols, positions, stockbars data etc needed for selling and purchasing into a data provider(s)

@@ -4,5 +4,9 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
+        environment:
+            - ALPACA_API_KEY=${ALPACA_API_KEY}
+            - ALPACA_API_SECRET=${ALPACA_API_SECRET}
+            - ALPACA_API_USE_TEST_CREDENTIALS=${ALPACA_API_USE_TEST_CREDENTIALS}
         volumes:
             - ./:/workspace
