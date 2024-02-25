@@ -16,23 +16,23 @@ import {
 
 try {
     batchLog('Start');
-    const blackdogConfiguratorClientScheme =
-        process.env.BLACKDOG_CONFIGURATOR_CLIENT_SCHEME ?? '';
-    const blackdogConfiguratorClientHost =
-        process.env.BLACKDOG_CONFIGURATOR_CLIENT_HOST ?? '';
-    const blackdogConfiguratorClientPort =
-        process.env.BLACKDOG_CONFIGURATOR_CLIENT_PORT ?? '';
-    const blackdogConfiguratorClientPath =
-        process.env.BLACKDOG_CONFIGURATOR_CLIENT_PATH ?? '';
-    const blackdogConfiguratorClientBaseUrl = `${blackdogConfiguratorClientScheme}://${blackdogConfiguratorClientHost}${
-        '' === blackdogConfiguratorClientPort
+    const blackDogConfiguratorBackendScheme =
+        process.env.BLACKDOG_CONFIGURATOR_BACKEND_SCHEME ?? '';
+    const blackDogConfiguratorBackendHost =
+        process.env.BLACKDOG_CONFIGURATOR_BACKEND_HOST ?? '';
+    const blackDogConfiguratorBackendPort =
+        process.env.BLACKDOG_CONFIGURATOR_BACKEND_PORT ?? '';
+    const blackDogConfiguratorBackendPath =
+        process.env.BLACKDOG_CONFIGURATOR_BACKEND_PATH ?? '';
+    const blackDogConfiguratorBackendBaseUrl = `${blackDogConfiguratorBackendScheme}://${blackDogConfiguratorBackendHost}${
+        '' === blackDogConfiguratorBackendPort
             ? ''
-            : `:${blackdogConfiguratorClientPort}`
-    }${blackdogConfiguratorClientPath}`;
+            : `:${blackDogConfiguratorBackendPort}`
+    }${blackDogConfiguratorBackendPath}`;
 
     const blackdogConfiguratorClient: BlackdogConfiguratorClient.Client =
         new BlackdogConfiguratorClient.ClientImpl(
-            blackdogConfiguratorClientBaseUrl
+            blackDogConfiguratorBackendBaseUrl
         );
     batchLog('Getting active strategyTemplateSeaDogDiscountScheme');
     const responseStrategyTemplateSeaDogDiscountSchemeActive =
