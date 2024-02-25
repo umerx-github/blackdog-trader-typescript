@@ -1,6 +1,7 @@
 version: '3.8'
 services:
     umerx_blackdog_trader_typescript:
+        image: ghcr.io/umerx-github/blackdog-trader-typescript:latest
         environment:
             - BLACKDOG_CONFIGURATOR_BACKEND_SCHEME=${BLACKDOG_CONFIGURATOR_BACKEND_SCHEME}
             - BLACKDOG_CONFIGURATOR_BACKEND_HOST=${BLACKDOG_CONFIGURATOR_BACKEND_HOST}

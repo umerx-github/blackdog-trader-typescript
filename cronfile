@@ -1,0 +1,3 @@
+# Run cron
+SHELL=/bin/bash
+0 0 * * * echo "$(date): Cron" && /usr/local/bin/node /workspace/build/src/strategyTemplateSeaDogDiscountScheme.js
