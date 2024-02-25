@@ -5,7 +5,7 @@ RUN npm config rm proxy
 RUN npm config rm https-proxy
 RUN npm ci --fetch-timeout=100000
 COPY tsconfig.json ./
-COPY src ./
+COPY src ./src
 RUN npm run build
 
 FROM node:20 AS publish
@@ -19,6 +19,6 @@ RUN chmod 0644 /etc/cron.d/cronfile
 RUN crontab /etc/cron.d/cronfile
 COPY --from=build /workspace/package.json /workspace/package-lock.json ./
 COPY --from=build /workspace/node_modules ./node_modules
-COPY --from=build /workspace/build ./
+COPY --from=build /workspace/build ./build
 CMD [ "cron", "-f" ]
 
