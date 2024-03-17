@@ -26,8 +26,15 @@
 -   [x] Handle error if a single symbol purchase fails (move on)
 -   [x] Make sure we are not truncating to 0 decimals until the final calculation where we need cents
 -   [x] Use our Strategy's cashInCents instead of alpaca account in Cents as limiting factor
+-   [ ] Set up build for CA certificate service
+-   [ ] Set up build for NGINX
+-   [ ] Create a docker compose file linking NGINX and the CA certificate service
+-   [ ] Start the CA Certificate Service on Pistachio: https://github.com/AndrewJDawes/ca-certificate-service/blob/main/run.sh
+-   [ ] Start the NGINX service on Pistachio: https://github.com/AndrewJDawes/nginx
+-   [ ] Start the Umerx Blackdog compose stack on Pistachio
 -   [ ] Figure out how to schedule and run the strategy
     -   [ ] Docker image with src installed
     -   [ ] Run image with command for cron
+-   [ ] Creat logging mechanism
 -   [ ] Automatically adjust Strategy cash if it is less than the available cash?
 -   [ ] Encapsulate the symbols, positions, stockbars data etc needed for selling and purchasing into a data provider(s)
