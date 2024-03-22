@@ -368,7 +368,7 @@ async function resolveOpenOrder(
                 order.strategyId,
                 `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was not found. Cancelling order`
             );
-            blackdogConfiguratorClient.order().cancelSingle({
+            await blackdogConfiguratorClient.order().cancelSingle({
                 id: order.id,
             });
             strategyLog(
