@@ -329,6 +329,10 @@ async function resolveOpenOrder(
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
 ) {
     try {
+        strategyLog(
+            order.strategyId,
+            `Resolving open order with id ${order.id} and Alpaca id ${order.alpacaOrderId}`
+        );
         const alpacaOrder = await alpacaClient.getOrder({
             order_id: order.alpacaOrderId,
         });
@@ -336,6 +340,10 @@ async function resolveOpenOrder(
             blackdogConfiguratorClient.order().fillSingle({
                 id: order.id,
             });
+            strategyLog(
+                order.strategyId,
+                `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was filled`
+            );
         } else {
             await alpacaClient.cancelOrder({
                 order_id: order.alpacaOrderId,
@@ -343,6 +351,10 @@ async function resolveOpenOrder(
             await blackdogConfiguratorClient.order().cancelSingle({
                 id: order.id,
             });
+            strategyLog(
+                order.strategyId,
+                `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was cancelled`
+            );
         }
     } catch (err: any) {
         // Order not found
@@ -352,9 +364,17 @@ async function resolveOpenOrder(
             err.hasOwnProperty('code') &&
             err.code === 40010001
         ) {
+            strategyLog(
+                order.strategyId,
+                `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was not found. Cancelling order`
+            );
             blackdogConfiguratorClient.order().cancelSingle({
                 id: order.id,
             });
+            strategyLog(
+                order.strategyId,
+                `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was cancelled`
+            );
         }
     }
 }
