@@ -166,7 +166,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Getting strategy information.`
     );
-    const strategy = await blackdogConfiguratorClient.strategy().getSingle({
+    let strategy = await blackdogConfiguratorClient.strategy().getSingle({
         id: strategyTemplateSeaDogDiscountScheme.strategyId,
     });
     const accountCashInCents = bankersRoundingTruncateToInt(account.cash * 100);
@@ -238,13 +238,18 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         handleFailedResolveOpenPositions(err);
     }
 
+    // Refresh the strategy
+    strategy = await blackdogConfiguratorClient.strategy().getSingle({
+        id: strategyTemplateSeaDogDiscountScheme.strategyId,
+    });
+
     try {
         strategyLog(
             strategyTemplateSeaDogDiscountScheme.strategyId,
             `Resolving open symbols.`
         );
         await resolveOpenSymbols(
-            strategy.cashInCents,
+            strategy,
             symbols,
             strategyTemplateSeaDogDiscountScheme,
             stockbars,
@@ -482,7 +487,7 @@ async function resolveOpenPosition(
 }
 
 async function resolveOpenSymbols(
-    accountCashInCents: number,
+    strategy: StrategyTypes.StrategyResponseBodyDataInstance,
     symbols: SymbolTypes.SymbolResponseBodyDataInstance[],
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     stockbars: {
@@ -556,9 +561,10 @@ async function resolveOpenSymbols(
     const lowestPriceSymbolCashInCents = bankersRoundingTruncateToInt(
         lowestPriceSymbol.bars[lowestPriceSymbol.bars.length - 1].vw * 100
     );
+    let accountCashInCents = strategy.cashInCents;
     strategyLog(
         strategyTemplateSeaDogDiscountScheme.strategyId,
-        `Account cash in cents: ${accountCashInCents}, Lowest price symbol cash in cents: ${lowestPriceSymbolCashInCents}`
+        `Account cash in cents: ${strategy.cashInCents}, Lowest price symbol cash in cents: ${lowestPriceSymbolCashInCents}`
     );
     while (accountCashInCents > lowestPriceSymbolCashInCents) {
         let affordablePriceIndex = 0;
@@ -673,12 +679,12 @@ async function resolveOpenSymbols(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Updating account cash in cents: ${accountCashInCents}`
     );
-    await blackdogConfiguratorClient.strategy().patchSingle(
-        { id: strategyTemplateSeaDogDiscountScheme.strategyId },
-        {
-            cashInCents: accountCashInCents,
-        }
-    );
+    // await blackdogConfiguratorClient.strategy().patchSingle(
+    //     { id: strategyTemplateSeaDogDiscountScheme.strategyId },
+    //     {
+    //         cashInCents: accountCashInCents,
+    //     }
+    // );
 }
 
 async function purchaseSymbol(
