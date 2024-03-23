@@ -674,17 +674,17 @@ async function resolveOpenSymbols(
                 continue;
             }
         }
+        const refreshedStrategy = await blackdogConfiguratorClient
+            .strategy()
+            .getSingle({
+                id: strategyTemplateSeaDogDiscountScheme.strategyId,
+            });
+        if (refreshedStrategy.cashInCents < accountCashInCents) {
+            throw new Error(
+                `Refreshed strategy cashInCents is less than account cashInCents. Strategy: ${refreshedStrategy.cashInCents}, Account: ${accountCashInCents}`
+            );
+        }
     }
-    strategyLog(
-        strategyTemplateSeaDogDiscountScheme.strategyId,
-        `Updating account cash in cents: ${accountCashInCents}`
-    );
-    // await blackdogConfiguratorClient.strategy().patchSingle(
-    //     { id: strategyTemplateSeaDogDiscountScheme.strategyId },
-    //     {
-    //         cashInCents: accountCashInCents,
-    //     }
-    // );
 }
 
 async function purchaseSymbol(
