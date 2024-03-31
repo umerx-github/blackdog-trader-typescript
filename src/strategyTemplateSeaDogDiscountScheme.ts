@@ -35,7 +35,7 @@ try {
             blackDogConfiguratorBackendBaseUrl
         );
     batchLog('Getting active strategyTemplateSeaDogDiscountScheme');
-    const responseStrategyTemplateSeaDogDiscountSchemeActive =
+    const { data: responseStrategyTemplateSeaDogDiscountSchemeActive } =
         await blackdogConfiguratorClient
             .strategyTemplateSeaDogDiscountScheme()
             .getMany({ status: 'active' });
@@ -166,9 +166,11 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Getting strategy information.`
     );
-    let strategy = await blackdogConfiguratorClient.strategy().getSingle({
-        id: strategyTemplateSeaDogDiscountScheme.strategyId,
-    });
+    let { data: strategy } = await blackdogConfiguratorClient
+        .strategy()
+        .getSingle({
+            id: strategyTemplateSeaDogDiscountScheme.strategyId,
+        });
     const accountCashInCents = bankersRoundingTruncateToInt(account.cash * 100);
     if (strategy.cashInCents > accountCashInCents) {
         throw new Error(
@@ -192,9 +194,11 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Getting open positions.`
     );
-    const openPositions = await blackdogConfiguratorClient.position().getMany({
-        strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
-    });
+    const { data: openPositions } = await blackdogConfiguratorClient
+        .position()
+        .getMany({
+            strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
+        });
     // union/distinct
     const symbolIds = Array.from(
         new Set([
@@ -206,9 +210,11 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Getting symbols.`
     );
-    const symbols = await blackdogConfiguratorClient.symbol().getMany({
-        ids: symbolIds,
-    });
+    const { data: symbols } = await blackdogConfiguratorClient
+        .symbol()
+        .getMany({
+            ids: symbolIds,
+        });
     strategyLog(
         strategyTemplateSeaDogDiscountScheme.strategyId,
         `Getting bars for symbols.`
@@ -239,9 +245,11 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     }
 
     // Refresh the strategy
-    strategy = await blackdogConfiguratorClient.strategy().getSingle({
-        id: strategyTemplateSeaDogDiscountScheme.strategyId,
-    });
+    ({ data: strategy } = await blackdogConfiguratorClient
+        .strategy()
+        .getSingle({
+            id: strategyTemplateSeaDogDiscountScheme.strategyId,
+        }));
 
     try {
         strategyLog(
@@ -312,10 +320,12 @@ async function resolveOpenOrders(
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance
 ) {
-    const openOrders = await blackdogConfiguratorClient.order().getMany({
-        strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
-        status: 'open',
-    });
+    const { data: openOrders } = await blackdogConfiguratorClient
+        .order()
+        .getMany({
+            strategyId: strategyTemplateSeaDogDiscountScheme.strategyId,
+            status: 'open',
+        });
     for (const openOrder of openOrders) {
         try {
             await resolveOpenOrder(
@@ -674,7 +684,7 @@ async function resolveOpenSymbols(
                 continue;
             }
         }
-        const refreshedStrategy = await blackdogConfiguratorClient
+        const { data: refreshedStrategy } = await blackdogConfiguratorClient
             .strategy()
             .getSingle({
                 id: strategyTemplateSeaDogDiscountScheme.strategyId,
