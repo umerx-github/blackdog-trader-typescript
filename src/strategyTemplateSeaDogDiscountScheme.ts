@@ -16,6 +16,7 @@ import {
     Position as PositionTypes,
     Symbol as SymbolTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
+import { StrategyLogger } from './types/index.js';
 
 try {
     batchLog('Start');
@@ -63,7 +64,7 @@ try {
                 strategyLogger(
                     'There was an unexpected error while executing this strategy',
                     'notice',
-                    { err }
+                    { rawData: err }
                 );
                 handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(err);
             })
@@ -120,11 +121,11 @@ function handleUnableToCalculatePercentileForBar(err: any) {
 function getBlackdogConfiguratorClientStrategyLogPostMany(
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
     strategyId: number
-) {
+): StrategyLogger {
     return async (
         message: string,
         level: LogTypes.LogLevel,
-        data?: any
+        data?: LogTypes.LogData
     ): Promise<
         ResponseTypes.ResponseBaseSuccess<
             StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
@@ -144,15 +145,7 @@ function getBlackdogConfiguratorClientStrategyLogPostMany(
 async function executeStrategyTemplateSeaDogDiscountScheme(
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
-    strategyLogger: (
-        message: string,
-        level: LogTypes.LogLevel,
-        data?: any
-    ) => Promise<
-        ResponseTypes.ResponseBaseSuccess<
-            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
-        >
-    >
+    strategyLogger: StrategyLogger
 ) {
     const end = new Date();
     // Alpaca API error if you try to query for recent data: subscription does not permit querying recent SIP data. Subtract 30 minutes
@@ -179,7 +172,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     await strategyLogger(`Started a new execution`, 'info');
     const account = await alpacaClient.getAccount();
     await strategyLogger(`Retrieved Alpaca account information`, 'debug', {
-        account,
+        rawData: account,
     });
     await strategyLogger(`Getting Blackdog strategy information`, 'debug');
     let { data: strategy } = await blackdogConfiguratorClient
@@ -188,7 +181,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             id: strategyTemplateSeaDogDiscountScheme.strategyId,
         });
     await strategyLogger(`Retrieved Blackdog strategy information`, 'debug', {
-        strategy,
+        rawData: strategy,
     });
     await strategyLogger(
         `Checking if strategy cashInCents is greater than account cashInCents`,
@@ -219,7 +212,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         await strategyLogger('Resolved open orders', 'debug');
     } catch (err) {
         await strategyLogger('Failed to resolve open orders', 'notice', {
-            err,
+            rawData: err,
         });
         handleFailedResolveOpenOrders(err);
     }
@@ -241,14 +234,14 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             ...openPositions.map((position) => position.symbolId),
         ]).values()
     );
-    strategyLogger(`Unique symbols found`, 'debug', { symbolIds });
+    strategyLogger(`Unique symbols found`, 'debug', { rawData: symbolIds });
     await strategyLogger('Getting symbols', 'debug');
     const { data: symbols } = await blackdogConfiguratorClient
         .symbol()
         .getMany({
             ids: symbolIds,
         });
-    await strategyLogger(`Retrieved symbols`, 'debug', { symbols });
+    await strategyLogger(`Retrieved symbols`, 'debug', { rawData: symbols });
     strategyLogger(`Getting bars for symbols`, 'debug');
     const stockbars = await getStockBars(
         symbols.map((symbol) => symbol.name),
@@ -260,7 +253,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     await strategyLogger(`Retrieved bars for symbols`, 'debug');
     try {
         await strategyLogger('Resolving open positions', 'debug', {
-            openPositions,
+            rawData: openPositions,
         });
         await resolveOpenPositions(
             openPositions,
@@ -273,14 +266,14 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         await strategyLogger('Resolved open positions', 'debug');
     } catch (err) {
         await strategyLogger('Failed to resolve open positions', 'notice', {
-            err,
+            rawData: err,
         });
         handleFailedResolveOpenPositions(err);
     }
 
     // Refresh the strategy
     await strategyLogger('Refreshing strategy', 'debug', {
-        strategy,
+        rawData: strategy,
     });
     ({ data: strategy } = await blackdogConfiguratorClient
         .strategy()
@@ -288,11 +281,11 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             id: strategyTemplateSeaDogDiscountScheme.strategyId,
         }));
     await strategyLogger('Refreshed strategy', 'debug', {
-        strategy,
+        rawData: strategy,
     });
     try {
         strategyLogger(`Resolving open symbols`, 'debug', {
-            symbols,
+            rawData: symbols,
         });
         await resolveOpenSymbols(
             strategy,
@@ -306,7 +299,7 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         await strategyLogger('Resolved open symbols', 'debug');
     } catch (err) {
         await strategyLogger('Failed to resolve open symbols', 'notice', {
-            err,
+            rawData: err,
         });
         handleFailedResolveOpenSymbols(err);
     }
@@ -362,15 +355,7 @@ async function resolveOpenOrders(
     alpacaClient: AlpacaClient,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
-    strategyLogger: (
-        message: string,
-        level: LogTypes.LogLevel,
-        data?: any
-    ) => Promise<
-        ResponseTypes.ResponseBaseSuccess<
-            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
-        >
-    >
+    strategyLogger: StrategyLogger
 ) {
     const { data: openOrders } = await blackdogConfiguratorClient
         .order()
@@ -387,7 +372,9 @@ async function resolveOpenOrders(
                 strategyLogger
             );
         } catch (err) {
-            strategyLogger('Failed to resolve open order', 'notice', { err });
+            strategyLogger('Failed to resolve open order', 'notice', {
+                rawData: err,
+            });
             handleFailedResolveOpenOrder(err);
         }
     }
@@ -396,22 +383,14 @@ async function resolveOpenOrder(
     order: OrderTypes.OrderResponseBodyDataInstance,
     alpacaClient: AlpacaClient,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
-    strategyLogger: (
-        message: string,
-        level: LogTypes.LogLevel,
-        data?: any
-    ) => Promise<
-        ResponseTypes.ResponseBaseSuccess<
-            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
-        >
-    >
+    strategyLogger: StrategyLogger
 ) {
     try {
         await strategyLogger(
             `Resolving open order with id ${order.id} and Alpaca id ${order.alpacaOrderId}`,
             'debug',
             {
-                order,
+                rawData: order,
             }
         );
         await strategyLogger(
@@ -425,7 +404,7 @@ async function resolveOpenOrder(
             `Got Alpaca order with id ${order.alpacaOrderId}`,
             'debug',
             {
-                alpacaOrder,
+                rawData: alpacaOrder,
             }
         );
         await strategyLogger(
@@ -484,7 +463,7 @@ async function resolveOpenOrder(
                 `Order with id ${order.id} and Alpaca id ${order.alpacaOrderId} was not found. Cancelling order`,
                 'notice',
                 {
-                    order,
+                    rawData: order,
                 }
             );
             await blackdogConfiguratorClient.order().cancelSingle({
@@ -612,15 +591,7 @@ async function resolveOpenSymbols(
     },
     alpacaClient: AlpacaClient,
     blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
-    strategyLogger: (
-        message: string,
-        level: LogTypes.LogLevel,
-        data?: any
-    ) => Promise<
-        ResponseTypes.ResponseBaseSuccess<
-            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
-        >
-    >
+    strategyLogger: StrategyLogger
 ) {
     // TODO
     const stockbarsForSymbols: {
@@ -663,7 +634,7 @@ async function resolveOpenSymbols(
             await strategyLogger(
                 `Failed to calculate percentile for symbol: ${symbol.name}`,
                 'notice',
-                { err }
+                { rawData: err }
             );
             handleUnableToCalculatePercentileForBar(err);
         }
@@ -786,7 +757,7 @@ async function resolveOpenSymbols(
                                 stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
                             }`,
                             'notice',
-                            { err, order }
+                            { rawData: { err, order } }
                         );
                         accountCashInCents = bankersRoundingTruncateToInt(
                             accountCashInCents -
@@ -811,7 +782,7 @@ async function resolveOpenSymbols(
                 await strategyLogger(
                     `Failed to purchase symbol: ${stockbarsForSymbol.symbol.name}`,
                     'notice',
-                    { err }
+                    { rawData: err }
                 );
                 handleFailedResolveOpenSymbol(err);
                 continue;
@@ -820,7 +791,7 @@ async function resolveOpenSymbols(
         await strategyLogger(
             `Refreshing strategy to check cash in cents`,
             'debug',
-            { strategy }
+            { rawData: strategy }
         );
         const { data: refreshedStrategy } = await blackdogConfiguratorClient
             .strategy()
@@ -828,7 +799,7 @@ async function resolveOpenSymbols(
                 id: strategyTemplateSeaDogDiscountScheme.strategyId,
             });
         await strategyLogger(`Refreshed strategy`, 'debug', {
-            refreshedStrategy,
+            rawData: refreshedStrategy,
         });
         if (refreshedStrategy.cashInCents < accountCashInCents) {
             throw new Error(
