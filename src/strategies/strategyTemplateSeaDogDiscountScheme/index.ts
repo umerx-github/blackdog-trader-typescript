@@ -11,8 +11,17 @@ import {
     Symbol as SymbolTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
 import { StrategyLogger } from '../../types/index.js';
-import { getAlpacaClient } from '../../clients/alpaca.js';
-import { getBlackdogConfiguratorClient } from '../../clients/blackdogConfigurator.js';
+import {
+    getAlpacaClient,
+    getStockBars,
+    purchaseSymbol,
+} from '../../clients/alpaca.js';
+import {
+    addOrderToConfigurator,
+    getBlackdogConfiguratorClient,
+    getBlackdogConfiguratorClientStrategyLogPostMany,
+} from '../../clients/blackdogConfigurator.js';
+import { bankersRoundingTruncateToInt } from '../../utils/index.js';
 
 try {
     batchLog('Start');
@@ -96,30 +105,6 @@ function handleFailedExecuteStrategyTemplateSeaDogDiscountScheme(err: any) {
 
 function handleUnableToCalculatePercentileForBar(err: any) {
     console.error(err);
-}
-
-function getBlackdogConfiguratorClientStrategyLogPostMany(
-    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
-    strategyId: number
-): StrategyLogger {
-    return async (
-        message: string,
-        level: LogTypes.LogLevel,
-        data?: LogTypes.LogData
-    ): Promise<
-        ResponseTypes.ResponseBaseSuccess<
-            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
-        >
-    > => {
-        return await blackdogConfiguratorClient.strategyLog().postMany([
-            {
-                strategyId: strategyId,
-                message: message,
-                level: level,
-                data: data,
-            },
-        ]);
-    };
 }
 
 async function executeStrategyTemplateSeaDogDiscountScheme(
@@ -273,52 +258,6 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
         });
         handleFailedResolveOpenSymbols(err);
     }
-}
-
-async function getStockBars(
-    symbolNames: string[],
-    start: Date,
-    end: Date,
-    timeframe: BarsV1Timeframe,
-    alpacaClient: AlpacaClient
-) {
-    /*
-    alpacaClient will return data in this shape:
-    {
-        bars: {
-            'AAPL': [],
-            'MSFT': [],
-        },
-        next_page_token: '...',
-    }
-    We need to request all the pages until next_page_token returns null and merge the data into one object where keys are the symbols and values are the bars.
-    */
-    const stockbars = await alpacaClient.getBars_v2({
-        symbols: symbolNames, // 'AAPL,MSFT',
-        start: start,
-        end: end,
-        timeframe: timeframe,
-    });
-
-    while (stockbars.next_page_token !== null) {
-        const nextPageStockbars = await alpacaClient.getBars_v2({
-            symbols: symbolNames, // 'AAPL,MSFT',
-            start: start,
-            end: end,
-            timeframe: timeframe,
-            page_token: stockbars.next_page_token,
-        });
-        for (const symbol in nextPageStockbars.bars) {
-            if (nextPageStockbars.bars.hasOwnProperty(symbol)) {
-                stockbars.bars[symbol] = [
-                    ...(stockbars.bars[symbol] ?? []),
-                    ...nextPageStockbars.bars[symbol],
-                ];
-            }
-        }
-        stockbars.next_page_token = nextPageStockbars.next_page_token;
-    }
-    return stockbars;
 }
 
 async function resolveOpenOrders(
@@ -778,80 +717,3 @@ async function resolveOpenSymbols(
         }
     }
 }
-
-async function purchaseSymbol(
-    symbolName: string,
-    priceInCents: number,
-    quantity: number,
-    alpacaClient: AlpacaClient
-): Promise<Order> {
-    return await alpacaClient.placeOrder({
-        symbol: symbolName,
-        qty: quantity,
-        side: 'buy',
-        type: 'limit',
-        time_in_force: 'day',
-        extended_hours: true,
-        limit_price: bankersRounding(priceInCents / 100),
-    });
-}
-
-async function addOrderToConfigurator(
-    strategyId: number,
-    symbolId: number,
-    alpacaOrderId: string,
-    quantity: number,
-    priceInCents: number,
-    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
-) {
-    await blackdogConfiguratorClient.order().postMany([
-        {
-            strategyId: strategyId,
-            symbolId: symbolId,
-            alpacaOrderId: alpacaOrderId,
-            quantity: quantity,
-            side: 'buy',
-            averagePriceInCents: priceInCents,
-        },
-    ]);
-}
-
-function bankersRoundingTruncateToInt(num: number): number {
-    return bankersRounding(num, 0);
-}
-
-function bankersRounding(num: number, decimalPlaces: number = 2): number {
-    const d = decimalPlaces;
-    const m = Math.pow(10, d);
-    const n = +(d ? num * m : num).toFixed(8); // Avoid rounding errors
-    const i = Math.floor(n),
-        f = n - i;
-    const e = 1e-8; // Allow for rounding errors in f
-    const r =
-        f > 0.5 - e && f < 0.5 + e ? (i % 2 == 0 ? i : i + 1) : Math.round(n);
-
-    return d ? r / m : r;
-}
-
-/*
-def round_float_to_nearest_cent(amount: float):
-    # Convert the amount to a Decimal object with two decimal places
-    decimal_amount = decimal.Decimal(str(amount)).quantize(
-        decimal.Decimal('.01'), rounding=decimal.ROUND_HALF_EVEN)
-    # Convert the Decimal object back to a float
-    return float(decimal_amount)
-
-
-def currency_float_to_int(value: float):
-    # Use banker's rounding
-    return round(value * 100)
-
-
-def currency_int_to_float(value: int):
-    return value / 100
-
-
-def currency_percent_of(percent: float, of: int):
-    return round(round(percent * of) / 100)  # ALSO WORKS
-    # return round((percent / 100) * of)  # WORKS
-*/

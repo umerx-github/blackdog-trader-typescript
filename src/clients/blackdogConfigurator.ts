@@ -1,4 +1,10 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
+import { StrategyLogger } from '../types/index.js';
+import {
+    Log as LogTypes,
+    Response as ResponseTypes,
+    StrategyLog as StrategyLogTypes,
+} from '@umerx/umerx-blackdog-configurator-types-typescript';
 
 export function getBlackdogConfiguratorClient() {
     const blackdogConfiguratorBackendScheme =
@@ -20,4 +26,48 @@ export function getBlackdogConfiguratorClient() {
             blackdogConfiguratorBackendBaseUrl
         );
     return blackdogConfiguratorClient;
+}
+
+export function getBlackdogConfiguratorClientStrategyLogPostMany(
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
+    strategyId: number
+): StrategyLogger {
+    return async (
+        message: string,
+        level: LogTypes.LogLevel,
+        data?: LogTypes.LogData
+    ): Promise<
+        ResponseTypes.ResponseBaseSuccess<
+            StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
+        >
+    > => {
+        return await blackdogConfiguratorClient.strategyLog().postMany([
+            {
+                strategyId: strategyId,
+                message: message,
+                level: level,
+                data: data,
+            },
+        ]);
+    };
+}
+
+export async function addOrderToConfigurator(
+    strategyId: number,
+    symbolId: number,
+    alpacaOrderId: string,
+    quantity: number,
+    priceInCents: number,
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+) {
+    await blackdogConfiguratorClient.order().postMany([
+        {
+            strategyId: strategyId,
+            symbolId: symbolId,
+            alpacaOrderId: alpacaOrderId,
+            quantity: quantity,
+            side: 'buy',
+            averagePriceInCents: priceInCents,
+        },
+    ]);
 }
