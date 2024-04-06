@@ -1,11 +1,5 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
-import {
-    AlpacaClient,
-    AlpacaStream,
-    BarsV1Timeframe,
-    Bar_v2,
-    Order,
-} from '@umerx/alpaca';
+import { AlpacaClient, BarsV1Timeframe, Bar_v2, Order } from '@umerx/alpaca';
 import {
     Response as ResponseTypes,
     Log as LogTypes,
@@ -18,27 +12,12 @@ import {
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
 import { StrategyLogger } from '../../types/index.js';
 import { getAlpacaClient } from '../../clients/alpaca.js';
+import { getBlackdogConfiguratorClient } from '../../clients/blackdogConfigurator.js';
 
 try {
     batchLog('Start');
-    const blackDogConfiguratorBackendScheme =
-        process.env.BLACKDOG_CONFIGURATOR_BACKEND_SCHEME ?? '';
-    const blackDogConfiguratorBackendHost =
-        process.env.BLACKDOG_CONFIGURATOR_BACKEND_HOST ?? '';
-    const blackDogConfiguratorBackendPort =
-        process.env.BLACKDOG_CONFIGURATOR_BACKEND_PORT ?? '';
-    const blackDogConfiguratorBackendPath =
-        process.env.BLACKDOG_CONFIGURATOR_BACKEND_PATH ?? '';
-    const blackDogConfiguratorBackendBaseUrl = `${blackDogConfiguratorBackendScheme}://${blackDogConfiguratorBackendHost}${
-        '' === blackDogConfiguratorBackendPort
-            ? ''
-            : `:${blackDogConfiguratorBackendPort}`
-    }${blackDogConfiguratorBackendPath}`;
 
-    const blackdogConfiguratorClient: BlackdogConfiguratorClient.Client =
-        new BlackdogConfiguratorClient.ClientImpl(
-            blackDogConfiguratorBackendBaseUrl
-        );
+    const blackdogConfiguratorClient = getBlackdogConfiguratorClient();
 
     batchLog('Getting active strategyTemplateSeaDogDiscountScheme');
     const { data: responseStrategyTemplateSeaDogDiscountSchemeActive } =
