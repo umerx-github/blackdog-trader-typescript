@@ -16,8 +16,8 @@ import {
     Position as PositionTypes,
     Symbol as SymbolTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
-import { StrategyLogger } from '../types/index.js';
-import { getAlpacaClient } from '../clients/alpaca.js';
+import { StrategyLogger } from '../../types/index.js';
+import { getAlpacaClient } from '../../clients/alpaca.js';
 
 try {
     batchLog('Start');
