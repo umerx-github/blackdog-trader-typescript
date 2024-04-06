@@ -1,1 +1,1 @@
-export * from './src/strategyTemplateSeaDogDiscountScheme.js';
+export * from './src/strategyTemplateSeaDogDiscountScheme/index.js';
