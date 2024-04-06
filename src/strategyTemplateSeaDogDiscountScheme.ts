@@ -17,6 +17,7 @@ import {
     Symbol as SymbolTypes,
 } from '@umerx/umerx-blackdog-configurator-types-typescript';
 import { StrategyLogger } from './types/index.js';
+import { getAlpacaClient } from './clients/alpaca.js';
 
 try {
     batchLog('Start');
@@ -154,20 +155,10 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
     start.setDate(
         end.getDate() - strategyTemplateSeaDogDiscountScheme.timeframeInDays
     );
-    const credentials = {
-        key: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-            ? process.env.ALPACA_API_KEY ?? ''
-            : strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
-        secret: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-            ? process.env.ALPACA_API_SECRET ?? ''
-            : strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
-        paper: Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-            ? Boolean(process.env.ALPACA_API_USE_TEST_CREDENTIALS)
-            : strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
-    };
-    const alpacaClient = new AlpacaClient({
-        credentials: credentials,
-        rate_limit: true,
+    const alpacaClient = getAlpacaClient({
+        key: strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
+        secret: strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
+        paper: strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
     });
     await strategyLogger(`Started a new execution`, 'info');
     const account = await alpacaClient.getAccount();
