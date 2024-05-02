@@ -1,4 +1,5 @@
 # Run cron
 SHELL=/bin/bash
-0 0 * * * echo "$(date): Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js
-0 3 * * * echo "$(date): Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/index.js
+0 0 * * * { echo "$(date): Midnight Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js; } | tee -a /workspace/log.txt
+0 3 * * * { echo "$(date): 3 AM Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/index.js; } | tee -a /workspace/log.txt
+* * * * * { echo "$(date): Every Minute Cron"; } | tee -a /workspace/log.txt
