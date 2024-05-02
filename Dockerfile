@@ -21,5 +21,4 @@ RUN crontab /etc/cron.d/cronfile
 COPY --from=build /workspace/package.json /workspace/package-lock.json ./
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/build ./build
-CMD [ "cron", "-f" ]
-
+ENTRYPOINT [ "cron", "-f" ]
