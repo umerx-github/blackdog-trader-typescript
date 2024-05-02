@@ -99,109 +99,118 @@ async function valueStrategyTemplateSeaDogDiscountScheme(
         `Strategy total assets value in cents minus holdings is ${totalAssetsValueInCents}`,
         'debug'
     );
-    // - Get the currently active template instance
-    //     - Access API keys
-    await strategyLogger('Fetching symbols', 'debug');
-    const symbols = await blackdogConfiguratorClient.symbol().getMany({
-        ids: strategyAssets.data.positions.map((position) => position.symbolId),
-    });
-    const alpacaClient = getAlpacaClient({
-        key: strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
-        secret: strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
-        paper: strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
-    });
-    await strategyLogger('Fetching stockbars for timeframe', 'debug', {
-        rawData: {
+    if (strategyAssets.data.positions.length > 0) {
+        // - Get the currently active template instance
+        //     - Access API keys
+        await strategyLogger('Fetching symbols for positions', 'debug');
+        const symbols = await blackdogConfiguratorClient.symbol().getMany({
+            ids: strategyAssets.data.positions.map((position) => position.symbolId),
+        });
+        await strategyLogger('Fethed symbols for positions', 'debug', {
+            rawData: {
+                start,
+                end,
+                symbols,
+            },
+        });
+        const alpacaClient = getAlpacaClient({
+            key: strategyTemplateSeaDogDiscountScheme.alpacaAPIKey,
+            secret: strategyTemplateSeaDogDiscountScheme.alpacaAPISecret,
+            paper: strategyTemplateSeaDogDiscountScheme.alpacaAPIPaper,
+        });
+        await strategyLogger('Fetching stockbars for timeframe', 'debug', {
+            rawData: {
+                start,
+                end,
+                symbols,
+            },
+        });
+        const stockBars = await getStockBars(
+            symbols.data.map((symbol) => symbol.name),
             start,
             end,
-            symbols,
-        },
-    });
-    const stockBars = await getStockBars(
-        symbols.data.map((symbol) => symbol.name),
-        start,
-        end,
-        '1Day',
-        alpacaClient
-    );
-    await strategyLogger('Fetched stockbars', 'debug');
-    // - For each Holding, use the API keys to fetch current market value
-    // - Sum up the current market values
-    await strategyLogger('Calculating total assets value', 'debug');
-    for (const position of strategyAssets.data.positions) {
-        await strategyLogger(
-            `Getting data for position with id ${position.id}`,
-            'debug',
-            {
-                rawData: {
-                    position,
-                },
-            }
+            '1Day',
+            alpacaClient
         );
-        const symbol = symbols.data.find(
-            (symbol) => symbol.id === position.symbolId
-        );
-        if (symbol === undefined) {
+        await strategyLogger('Fetched stockbars', 'debug');
+        // - For each Holding, use the API keys to fetch current market value
+        // - Sum up the current market values
+        await strategyLogger('Calculating total assets value', 'debug');
+        for (const position of strategyAssets.data.positions) {
             await strategyLogger(
-                `Unable to find symbol for position with id ${position.id} and symbolId ${position.symbolId}`,
-                'notice',
+                `Getting data for position with id ${position.id}`,
+                'debug',
                 {
                     rawData: {
                         position,
-                        symbols,
                     },
                 }
             );
-            continue;
-        }
-        const bars = stockBars.bars[symbol.name];
-        if (bars === undefined) {
+            const symbol = symbols.data.find(
+                (symbol) => symbol.id === position.symbolId
+            );
+            if (symbol === undefined) {
+                await strategyLogger(
+                    `Unable to find symbol for position with id ${position.id} and symbolId ${position.symbolId}`,
+                    'notice',
+                    {
+                        rawData: {
+                            position,
+                            symbols,
+                        },
+                    }
+                );
+                continue;
+            }
+            const bars = stockBars.bars[symbol.name];
+            if (bars === undefined) {
+                await strategyLogger(
+                    `Unable to find bars for symbol with name ${symbol.name}`,
+                    'notice',
+                    {
+                        rawData: {
+                            symbol,
+                            stockBars,
+                        },
+                    }
+                );
+                continue;
+            }
+            if (bars.length < 1) {
+                await strategyLogger(
+                    `No bars found for symbol with name ${symbol.name}`,
+                    'notice',
+                    {
+                        rawData: {
+                            symbol,
+                            bars,
+                        },
+                    }
+                );
+                continue;
+            }
+            const mostRecentBar = bars[bars.length - 1];
+            await strategyLogger(`Most recent bar`, 'debug', {
+                rawData: {
+                    mostRecentBar,
+                },
+            });
+            const positionValueInCents = bankersRoundingTruncateToInt(
+                position.quantity *
+                    bankersRoundingTruncateToInt(mostRecentBar.vw * 100)
+            );
             await strategyLogger(
-                `Unable to find bars for symbol with name ${symbol.name}`,
-                'notice',
-                {
-                    rawData: {
-                        symbol,
-                        stockBars,
-                    },
-                }
+                `Position value in cents: ${positionValueInCents}.`,
+                'debug'
             );
-            continue;
-        }
-        if (bars.length < 1) {
+            totalAssetsValueInCents = bankersRoundingTruncateToInt(
+                totalAssetsValueInCents + positionValueInCents
+            );
             await strategyLogger(
-                `No bars found for symbol with name ${symbol.name}`,
-                'notice',
-                {
-                    rawData: {
-                        symbol,
-                        bars,
-                    },
-                }
+                `Total assets value in cents is now ${totalAssetsValueInCents}`,
+                'debug'
             );
-            continue;
         }
-        const mostRecentBar = bars[bars.length - 1];
-        await strategyLogger(`Most recent bar`, 'debug', {
-            rawData: {
-                mostRecentBar,
-            },
-        });
-        const positionValueInCents = bankersRoundingTruncateToInt(
-            position.quantity *
-                bankersRoundingTruncateToInt(mostRecentBar.vw * 100)
-        );
-        await strategyLogger(
-            `Position value in cents: ${positionValueInCents}.`,
-            'debug'
-        );
-        totalAssetsValueInCents = bankersRoundingTruncateToInt(
-            totalAssetsValueInCents + positionValueInCents
-        );
-        await strategyLogger(
-            `Total assets value in cents is now ${totalAssetsValueInCents}`,
-            'debug'
-        );
     }
     await strategyLogger(
         `Updating strategy total assets value in cents to ${totalAssetsValueInCents}`,
