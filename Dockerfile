@@ -1,5 +1,6 @@
 FROM node:20 AS build
 WORKDIR /workspace
+COPY entrypoint.sh ./
 COPY package.json package-lock.json ./
 RUN npm config rm proxy
 RUN npm config rm https-proxy
@@ -18,7 +19,8 @@ COPY cronfile /etc/cron.d/cronfile
 RUN chmod 0644 /etc/cron.d/cronfile
 # Registering file to crontab
 RUN crontab /etc/cron.d/cronfile
+COPY --from=build /workspace/entrypoint.sh /workspace/entrypoint.sh
 COPY --from=build /workspace/package.json /workspace/package-lock.json ./
 COPY --from=build /workspace/node_modules ./node_modules
 COPY --from=build /workspace/build ./build
-ENTRYPOINT [ "cron", "-f" ]
+CMD [ "/bin/bash", "/workspace/entrypoint.sh" ]

@@ -10,7 +10,7 @@ import { bankersRoundingTruncateToInt } from '../../utils/index.js';
 
 try {
     batchLog('Start');
-
+    console.log({ process: process.env });
     const blackdogConfiguratorClient = getBlackdogConfiguratorClient();
 
     batchLog('Getting active strategyTemplateSeaDogDiscountScheme');
@@ -104,7 +104,9 @@ async function valueStrategyTemplateSeaDogDiscountScheme(
         //     - Access API keys
         await strategyLogger('Fetching symbols for positions', 'debug');
         const symbols = await blackdogConfiguratorClient.symbol().getMany({
-            ids: strategyAssets.data.positions.map((position) => position.symbolId),
+            ids: strategyAssets.data.positions.map(
+                (position) => position.symbolId
+            ),
         });
         await strategyLogger('Fethed symbols for positions', 'debug', {
             rawData: {

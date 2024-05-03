@@ -1,5 +1,9 @@
 # Run cron
 SHELL=/bin/bash
-0 0 * * * { echo "$(date): Midnight Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js; } | tee -a /workspace/log.txt
-0 3 * * * { echo "$(date): 3 AM Cron" && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/index.js; } | tee -a /workspace/log.txt
-* * * * * { echo "$(date): Every Minute Cron"; } | tee -a /workspace/log.txt
+# Option 1
+# * * * * * { echo "$(date): Every Minute Cron" && set -o allexport && source /etc/environment && set +o allexport && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js; } | tee -a /workspace/log.txt
+# Option 2
+# * * * * * { echo "$(date): Every Minute Cron" && set -o allexport && source <(tr '\0' '\n' < /proc/1/environ) && set +o allexport && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js; } | tee -a /workspace/log.txt
+
+0 0 * * * set -o allexport && source <(tr '\0' '\n' </proc/1/environ) && set +o allexport && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/strategyValue.js
+0 3 * * * set -o allexport && source <(tr '\0' '\n' </proc/1/environ) && set +o allexport && /usr/local/bin/node /workspace/build/src/strategies/strategyTemplateSeaDogDiscountScheme/index.js
