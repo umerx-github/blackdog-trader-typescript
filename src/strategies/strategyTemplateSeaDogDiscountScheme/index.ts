@@ -325,7 +325,7 @@ async function resolveOpenOrder(
                 `Alpaca order status is filled. Filling Blackdog order`,
                 'debug'
             );
-            blackdogConfiguratorClient.order().fillSingle({
+            await blackdogConfiguratorClient.order().fillSingle({
                 id: order.id,
             });
             await strategyLogger(
