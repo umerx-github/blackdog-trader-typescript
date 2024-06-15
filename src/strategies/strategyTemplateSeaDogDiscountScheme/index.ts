@@ -1,5 +1,5 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
-import { AlpacaClient, BarsV1Timeframe, Bar_v2, Order } from '@umerx/alpaca';
+import { AlpacaClient, BarsV1Timeframe, Bar_v2, Order, PlaceOrder } from '@umerx/alpaca';
 import {
     Response as ResponseTypes,
     Log as LogTypes,
@@ -21,7 +21,7 @@ import {
     getBlackdogConfiguratorClient,
     getBlackdogConfiguratorClientStrategyLogPostMany,
 } from '../../clients/blackdogConfigurator.js';
-import { bankersRoundingTruncateToInt } from '../../utils/index.js';
+import { bankersRounding, bankersRoundingTruncateToInt } from '../../utils/index.js';
 
 try {
     batchLog('Start');
@@ -216,7 +216,8 @@ async function executeStrategyTemplateSeaDogDiscountScheme(
             strategyTemplateSeaDogDiscountScheme,
             stockbars,
             alpacaClient,
-            blackdogConfiguratorClient
+            blackdogConfiguratorClient,
+            strategyLogger
         );
         await strategyLogger('Resolved open positions', 'debug');
     } catch (err) {
@@ -397,30 +398,68 @@ async function resolveOpenPositions(
         next_page_token: string | null;
     },
     alpacaClient: AlpacaClient,
-    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
+    strategyLogger: StrategyLogger
 ) {
     for (const openPosition of openPositions) {
         try {
+            strategyLogger(
+                `Resolving open position with id ${openPosition.id}`,
+                'debug',
+                {
+                    rawData: openPosition,
+                }
+            );
+            strategyLogger(
+                `Getting symbol for open position with symbolId ${openPosition.symbolId}`,
+                'debug'
+            );
             const symbol = symbols.find(
                 (symbol) => symbol.id === openPosition.symbolId
             );
             if (symbol === undefined) {
+                strategyLogger(
+                    `Symbol not found for open position with symbolId ${openPosition.symbolId}`,
+                    'notice'
+                );
                 continue;
             }
+            strategyLogger(
+                `Got symbol for open position with symbolId ${openPosition.symbolId}`,
+                'debug',
+                { rawData: symbol }
+            );
+            strategyLogger(`Getting bars for symbol ${symbol.name}`, 'debug');
             const bars = stockbars.bars[symbol.name];
             if (bars === undefined) {
+                strategyLogger(
+                    `Bars not found for symbol ${symbol.name}`,
+                    'notice'
+                );
                 continue;
             }
+            strategyLogger(`Got bars for symbol ${symbol.name}`, 'debug', {
+                rawData: {
+                    count: bars.length,
+                },
+            });
             await resolveOpenPosition(
                 openPosition,
                 symbol,
                 strategyTemplateSeaDogDiscountScheme,
                 bars,
                 alpacaClient,
-                blackdogConfiguratorClient
+                blackdogConfiguratorClient,
+                strategyLogger
             );
         } catch (err) {
+            strategyLogger(
+                `Failed to resolve open position with id ${openPosition.id}`,
+                'notice',
+                { rawData: err }
+            );
             handleFailedResolveOpenPosition(err);
+            continue;
         }
     }
 }
@@ -431,26 +470,67 @@ async function resolveOpenPosition(
     strategyTemplateSeaDogDiscountScheme: StrategyTemplateSeaDogDiscountSchemeTypes.StrategyTemplateSeaDogDiscountSchemeResponseBodyDataInstance,
     bars: Bar_v2[],
     alpacaClient: AlpacaClient,
-    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client
+    blackdogConfiguratorClient: BlackdogConfiguratorClient.Client,
+    strategyLogger: StrategyLogger
 ) {
+    strategyLogger(
+        `Resolving open position with id ${position.id} and symbol ${symbol.name}`,
+        'debug',
+        {
+            rawData: {
+                position,
+                symbol,
+            },
+        }
+    );
+    strategyLogger('Getting Alpaca position', 'debug');
     const alpacaPosition = await alpacaClient.getPosition({
         symbol: symbol.name,
     });
+    strategyLogger('Got Alpaca position', 'debug', {
+        rawData: alpacaPosition,
+    });
     if (position.quantity > alpacaPosition.qty) {
+        strategyLogger(
+            `Position quantity is greater than Alpaca position quantity. Symbol: ${symbol.name}, Position: ${position.quantity}, Alpaca: ${alpacaPosition.qty}`,
+            'notice'
+        );
         throw new Error(
             `Position quantity is greater than Alpaca position quantity. Symbol: ${symbol.name}, Position: ${position.quantity}, Alpaca: ${alpacaPosition.qty}`
         );
     }
     // Get the last bar
+    strategyLogger('Getting most recent bar', 'debug');
     const mostRecentBar = bars[bars.length - 1];
+    strategyLogger('Got most recent bar', 'debug', {
+        rawData: mostRecentBar,
+    });
     // Identify how many bars have a price that is lower or equal to the last bar
+    strategyLogger(
+        'Calculating number of bars with lower or equal price',
+        'debug'
+    );
     const numberOfBarsWithLowerOrEqualPrice = bars.filter(
         (bar) => bar.vw <= mostRecentBar.vw
     ).length;
-    const mostRecentBarVolumeWeightedAveragePriceInDollars = mostRecentBar.vw;
+    strategyLogger(
+        'Calculated number of bars with lower or equal price',
+        'debug',
+        {
+            rawData: numberOfBarsWithLowerOrEqualPrice,
+        }
+    );
+    // Alpaca Data API returns the volume weighted average price in dollars with fractional cents. We can't place orders with fractional cents.
+    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents = mostRecentBar.vw;
+    // Round to 2 decimal places
+    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents = bankersRounding(
+        mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
+        2
+    );
+    // Convert to cents for our calculations
     const mostRecentBarVolumeWeightedAveragePriceInCents =
         bankersRoundingTruncateToInt(
-            mostRecentBarVolumeWeightedAveragePriceInDollars * 100
+            mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents * 100
         );
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
@@ -458,33 +538,69 @@ async function resolveOpenPosition(
         (mostRecentBarVolumeWeightedAveragePriceInCents /
             position.averagePriceInCents) *
         100;
+    strategyLogger('Checking if position is in the sell percentile', 'debug', {
+        rawData: {
+            mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
+            mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents,
+            mostRecentBarVolumeWeightedAveragePriceInCents,
+            mostRecentBarPercentile,
+            gainPercentage,
+            strategyTemplateSeaDogDiscountSchemeSellAtPercentile:
+            strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
+            strategyTemplateSeaDogDiscountSchemeMinimumGainPercent:
+            strategyTemplateSeaDogDiscountScheme.minimumGainPercent,
+            strategyTemplateSeaDogDiscountScheme,
+        },
+    });
     if (
         mostRecentBarPercentile >
             strategyTemplateSeaDogDiscountScheme.sellAtPercentile &&
         gainPercentage >=
             strategyTemplateSeaDogDiscountScheme.minimumGainPercent
     ) {
-        // Sell
-        const order = await alpacaClient.placeOrder({
+        strategyLogger(
+            `Position is in the sell percentile. SellAtPercentile: ${strategyTemplateSeaDogDiscountScheme.sellAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
+            'debug'
+        );
+        const orderParams: PlaceOrder = {
             symbol: symbol.name,
             qty: position.quantity,
             side: 'sell',
             type: 'limit',
             time_in_force: 'day',
             extended_hours: true,
-            limit_price: mostRecentBarVolumeWeightedAveragePriceInDollars,
+            limit_price: mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents,
+        };
+        // Sell
+        strategyLogger('Selling position', 'debug', {
+            rawData: orderParams,
         });
-        await blackdogConfiguratorClient.order().postMany([
-            {
-                strategyId: position.strategyId,
-                symbolId: position.symbolId,
-                alpacaOrderId: order.id,
-                quantity: position.quantity,
-                side: 'sell',
-                averagePriceInCents:
-                    mostRecentBarVolumeWeightedAveragePriceInCents,
-            },
-        ]);
+        const order = await alpacaClient.placeOrder(orderParams);
+        strategyLogger('Sell order placed', 'debug', {
+            rawData: order,
+        });
+        strategyLogger('Adding order to configurator', 'debug');
+        const configuratorOrders = await blackdogConfiguratorClient
+            .order()
+            .postMany([
+                {
+                    strategyId: position.strategyId,
+                    symbolId: position.symbolId,
+                    alpacaOrderId: order.id,
+                    quantity: position.quantity,
+                    side: 'sell',
+                    averagePriceInCents:
+                        mostRecentBarVolumeWeightedAveragePriceInCents,
+                },
+            ]);
+        strategyLogger('Added order to configurator', 'debug', {
+            rawData: configuratorOrders,
+        });
+    } else {
+        strategyLogger(
+            `Position is not in the sell percentile. SellAtPercentile: ${strategyTemplateSeaDogDiscountScheme.sellAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
+            'debug'
+        );
     }
 }
 

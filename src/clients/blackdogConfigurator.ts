@@ -40,7 +40,8 @@ export function getBlackdogConfiguratorClientStrategyLogPostMany(
         ResponseTypes.ResponseBaseSuccess<
             StrategyLogTypes.StrategyLogResponseBodyDataInstance[]
         >
-    > => {
+        > => {
+        // console.log(`Strategy ${strategyId}: ${message}`, data);
         return await blackdogConfiguratorClient.strategyLog().postMany([
             {
                 strategyId: strategyId,
