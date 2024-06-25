@@ -775,7 +775,7 @@ async function resolveOpenSymbols(
                         }
                     } catch (err) {
                         await strategyLogger(
-                            `Failed to cancle Order. Order: ${
+                            `Failed to cancel Order. Order: ${
                                 order.id
                             }. Decreasing account cash in cents: ${accountCashInCents} - ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents} = ${
                                 accountCashInCents -
