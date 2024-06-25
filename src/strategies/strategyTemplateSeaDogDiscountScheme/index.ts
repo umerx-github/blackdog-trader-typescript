@@ -810,6 +810,9 @@ async function resolveOpenSymbols(
                     { rawData: err }
                 );
                 handleFailedResolveOpenSymbol(err);
+                // Remove this symbol from the list and do not attempt to purchase it again. This is to avoid an infinite loop.
+                stockbarsForSymbols.splice(i, 1);
+                i--;
                 continue;
             }
         }
