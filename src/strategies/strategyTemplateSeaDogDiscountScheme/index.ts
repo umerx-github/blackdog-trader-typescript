@@ -534,8 +534,12 @@ async function resolveOpenPosition(
         );
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
+    // Add 1 cent to the buy price to avoid wash orders where we place a sell order that is the same price as an open buy order.
+    // Example: { "code": 40310000, "message": "potential wash trade detected. use complex orders", "reject_reason": "sell order exists, buy limit price should be less than existing sell limit price", "buy_limit_price": "496.82", "sell_limit_price": "496.82", "existing_order_id": "afbd0f85-26b1-4cf5-8f00-57c568750bd6" }
+    const sellPriceInCents = mostRecentBarVolumeWeightedAveragePriceInCents + 1;
+    const sellPriceInDollars = bankersRounding(sellPriceInCents / 100, 2);
     const gainPercentage =
-        (mostRecentBarVolumeWeightedAveragePriceInCents /
+        (sellPriceInCents /
             position.averagePriceInCents) *
         100;
     strategyLogger('Checking if position is in the sell percentile', 'debug', {
@@ -544,6 +548,8 @@ async function resolveOpenPosition(
             mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents,
             mostRecentBarVolumeWeightedAveragePriceInCents,
             mostRecentBarPercentile,
+            sellPriceInCents,
+            sellPriceInDollars,
             gainPercentage,
             strategyTemplateSeaDogDiscountSchemeSellAtPercentile:
             strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
@@ -569,7 +575,7 @@ async function resolveOpenPosition(
             type: 'limit',
             time_in_force: 'day',
             extended_hours: true,
-            limit_price: mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents,
+            limit_price: sellPriceInDollars,
         };
         // Sell
         strategyLogger('Selling position', 'debug', {
@@ -590,7 +596,7 @@ async function resolveOpenPosition(
                     quantity: position.quantity,
                     side: 'sell',
                     averagePriceInCents:
-                        mostRecentBarVolumeWeightedAveragePriceInCents,
+                        sellPriceInCents,
                 },
             ]);
         strategyLogger('Added order to configurator', 'debug', {
@@ -712,16 +718,17 @@ async function resolveOpenSymbols(
                 `Account cash in cents: ${accountCashInCents}, Stock current price in cents: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`,
                 'debug'
             );
+            const buyPrice = stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents;
             await strategyLogger(
                 `Checking if account cash in cents is less than stock current price in cents`,
                 'debug'
             );
             if (
                 accountCashInCents <
-                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+                buyPrice
             ) {
                 await strategyLogger(
-                    `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`,
+                    `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${buyPrice}`,
                     'debug'
                 );
                 affordablePriceIndex = i + 1;
@@ -734,7 +741,7 @@ async function resolveOpenSymbols(
                 );
                 const order = await purchaseSymbol(
                     stockbarsForSymbol.symbol.name,
-                    stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents,
+                    buyPrice,
                     1,
                     alpacaClient
                 );
@@ -752,7 +759,7 @@ async function resolveOpenSymbols(
                         stockbarsForSymbol.symbol.id,
                         order.id,
                         1,
-                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents,
+                        buyPrice,
                         blackdogConfiguratorClient
                     );
                     await strategyLogger(
@@ -777,31 +784,31 @@ async function resolveOpenSymbols(
                         await strategyLogger(
                             `Failed to cancel Order. Order: ${
                                 order.id
-                            }. Decreasing account cash in cents: ${accountCashInCents} - ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents} = ${
+                            }. Decreasing account cash in cents: ${accountCashInCents} - ${buyPrice} = ${
                                 accountCashInCents -
-                                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+                                buyPrice
                             }`,
                             'notice',
                             { rawData: { err, order } }
                         );
                         accountCashInCents = bankersRoundingTruncateToInt(
                             accountCashInCents -
-                                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+                                buyPrice
                         );
                         throw err;
                     }
                     throw err;
                 }
                 await strategyLogger(
-                    `Decreasing account cash in cents: ${accountCashInCents} - ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents} = ${
+                    `Decreasing account cash in cents: ${accountCashInCents} - ${buyPrice} = ${
                         accountCashInCents -
-                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+                        buyPrice
                     }`,
                     'debug'
                 );
                 accountCashInCents = bankersRoundingTruncateToInt(
                     accountCashInCents -
-                        stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents
+                        buyPrice
                 );
             } catch (err) {
                 await strategyLogger(
