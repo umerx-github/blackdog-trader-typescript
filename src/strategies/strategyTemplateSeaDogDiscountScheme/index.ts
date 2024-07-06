@@ -1,5 +1,11 @@
 import { Client as BlackdogConfiguratorClient } from '@umerx/umerx-blackdog-configurator-client-typescript';
-import { AlpacaClient, BarsV1Timeframe, Bar_v2, Order, PlaceOrder } from '@umerx/alpaca';
+import {
+    AlpacaClient,
+    BarsV1Timeframe,
+    Bar_v2,
+    Order,
+    PlaceOrder,
+} from '@umerx/alpaca';
 import {
     Response as ResponseTypes,
     Log as LogTypes,
@@ -21,7 +27,10 @@ import {
     getBlackdogConfiguratorClient,
     getBlackdogConfiguratorClientStrategyLogPostMany,
 } from '../../clients/blackdogConfigurator.js';
-import { bankersRounding, bankersRoundingTruncateToInt } from '../../utils/index.js';
+import {
+    bankersRounding,
+    bankersRoundingTruncateToInt,
+} from '../../utils/index.js';
 
 try {
     batchLog('Start');
@@ -521,16 +530,19 @@ async function resolveOpenPosition(
         }
     );
     // Alpaca Data API returns the volume weighted average price in dollars with fractional cents. We can't place orders with fractional cents.
-    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents = mostRecentBar.vw;
+    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents =
+        mostRecentBar.vw;
     // Round to 2 decimal places
-    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents = bankersRounding(
-        mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
-        2
-    );
+    const mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents =
+        bankersRounding(
+            mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
+            2
+        );
     // Convert to cents for our calculations
     const mostRecentBarVolumeWeightedAveragePriceInCents =
         bankersRoundingTruncateToInt(
-            mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents * 100
+            mostRecentBarVolumeWeightedAveragePriceInDollarsWithoutFractionalCents *
+                100
         );
     const mostRecentBarPercentile =
         (numberOfBarsWithLowerOrEqualPrice / bars.length) * 100;
@@ -544,9 +556,7 @@ async function resolveOpenPosition(
     // Example: If averagePriceInCents was 100 and sellPriceInCents (current price) is 90, the gain percentage is -10%.
     // Example: If averagePriceInCents was 50 and sellPriceInCents (current price) is 100, the gain percentage is 100%.
     const gainPercentage =
-        ((sellPriceInCents /
-            position.averagePriceInCents) *
-        100) - 100;
+        (sellPriceInCents / position.averagePriceInCents) * 100 - 100;
     strategyLogger('Checking if position is in the sell percentile', 'debug', {
         rawData: {
             mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
@@ -556,10 +566,10 @@ async function resolveOpenPosition(
             sellPriceInCents,
             sellPriceInDollars,
             gainPercentage,
-            strategyTemplateSeaDogDiscountSchemeSellAtPercentile:
-            strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
-            strategyTemplateSeaDogDiscountSchemeMinimumGainPercent:
-            strategyTemplateSeaDogDiscountScheme.minimumGainPercent,
+            sellAtPercentile:
+                strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
+            minimumGainPercent:
+                strategyTemplateSeaDogDiscountScheme.minimumGainPercent,
             strategyTemplateSeaDogDiscountScheme,
         },
     });
@@ -569,10 +579,14 @@ async function resolveOpenPosition(
         gainPercentage >=
             strategyTemplateSeaDogDiscountScheme.minimumGainPercent
     ) {
-        strategyLogger(
-            `Position is in the sell percentile. SellAtPercentile: ${strategyTemplateSeaDogDiscountScheme.sellAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
-            'debug'
-        );
+        strategyLogger(`Position is in the sell percentile`, 'debug', {
+            rawData: {
+                symbol: symbol.name,
+                mostRecentBarPercentile,
+                sellAtPercentile:
+                    strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
+            },
+        });
         const orderParams: PlaceOrder = {
             symbol: symbol.name,
             qty: position.quantity,
@@ -600,18 +614,21 @@ async function resolveOpenPosition(
                     alpacaOrderId: order.id,
                     quantity: position.quantity,
                     side: 'sell',
-                    averagePriceInCents:
-                        sellPriceInCents,
+                    averagePriceInCents: sellPriceInCents,
                 },
             ]);
         strategyLogger('Added order to configurator', 'debug', {
             rawData: configuratorOrders,
         });
     } else {
-        strategyLogger(
-            `Position is not in the sell percentile. SellAtPercentile: ${strategyTemplateSeaDogDiscountScheme.sellAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
-            'debug'
-        );
+        strategyLogger(`Position is not in the sell percentile`, 'debug', {
+            rawData: {
+                symbol: symbol.name,
+                mostRecentBarPercentile,
+                sellAtPercentile:
+                    strategyTemplateSeaDogDiscountScheme.sellAtPercentile,
+            },
+        });
     }
 }
 
@@ -653,8 +670,16 @@ async function resolveOpenSymbols(
                 strategyTemplateSeaDogDiscountScheme.buyAtPercentile
             ) {
                 await strategyLogger(
-                    `Symbol ${symbol.name} is in the buy percentile. BuyAtPercentile: ${strategyTemplateSeaDogDiscountScheme.buyAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
-                    'debug'
+                    `Symbol ${symbol.name} is in the buy percentile`,
+                    'debug',
+                    {
+                        rawData: {
+                            symbol,
+                            mostRecentBarPercentile,
+                            buyAtPercentile:
+                                strategyTemplateSeaDogDiscountScheme.buyAtPercentile,
+                        },
+                    }
                 );
                 stockbarsForSymbols.push({
                     symbol: symbol,
@@ -662,8 +687,16 @@ async function resolveOpenSymbols(
                 });
             } else {
                 await strategyLogger(
-                    `Symbol ${symbol.name} is not in the buy percentile. BuyAtPercentile: ${strategyTemplateSeaDogDiscountScheme.buyAtPercentile}. Percentile: ${mostRecentBarPercentile}`,
-                    'debug'
+                    `Symbol ${symbol.name} is not in the buy percentile`,
+                    'debug',
+                    {
+                        rawData: {
+                            symbol,
+                            mostRecentBarPercentile,
+                            buyAtPercentile:
+                                strategyTemplateSeaDogDiscountScheme.buyAtPercentile,
+                        },
+                    }
                 );
             }
         } catch (err) {
@@ -723,15 +756,13 @@ async function resolveOpenSymbols(
                 `Account cash in cents: ${accountCashInCents}, Stock current price in cents: ${stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents}`,
                 'debug'
             );
-            const buyPrice = stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents;
+            const buyPrice =
+                stockbarsForSymbolMostRecentBarVolumeWeightedAveragePriceInCents;
             await strategyLogger(
                 `Checking if account cash in cents is less than stock current price in cents`,
                 'debug'
             );
-            if (
-                accountCashInCents <
-                buyPrice
-            ) {
+            if (accountCashInCents < buyPrice) {
                 await strategyLogger(
                     `Account cash in cents is less than stock current price in cents. Account: ${accountCashInCents}, Stock: ${buyPrice}`,
                     'debug'
@@ -790,15 +821,13 @@ async function resolveOpenSymbols(
                             `Failed to cancel Order. Order: ${
                                 order.id
                             }. Decreasing account cash in cents: ${accountCashInCents} - ${buyPrice} = ${
-                                accountCashInCents -
-                                buyPrice
+                                accountCashInCents - buyPrice
                             }`,
                             'notice',
                             { rawData: { err, order } }
                         );
                         accountCashInCents = bankersRoundingTruncateToInt(
-                            accountCashInCents -
-                                buyPrice
+                            accountCashInCents - buyPrice
                         );
                         throw err;
                     }
@@ -806,14 +835,12 @@ async function resolveOpenSymbols(
                 }
                 await strategyLogger(
                     `Decreasing account cash in cents: ${accountCashInCents} - ${buyPrice} = ${
-                        accountCashInCents -
-                        buyPrice
+                        accountCashInCents - buyPrice
                     }`,
                     'debug'
                 );
                 accountCashInCents = bankersRoundingTruncateToInt(
-                    accountCashInCents -
-                        buyPrice
+                    accountCashInCents - buyPrice
                 );
             } catch (err) {
                 await strategyLogger(
