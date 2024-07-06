@@ -538,10 +538,15 @@ async function resolveOpenPosition(
     // Example: { "code": 40310000, "message": "potential wash trade detected. use complex orders", "reject_reason": "sell order exists, buy limit price should be less than existing sell limit price", "buy_limit_price": "496.82", "sell_limit_price": "496.82", "existing_order_id": "afbd0f85-26b1-4cf5-8f00-57c568750bd6" }
     const sellPriceInCents = mostRecentBarVolumeWeightedAveragePriceInCents + 1;
     const sellPriceInDollars = bankersRounding(sellPriceInCents / 100, 2);
+    // Calculate the gain percentage.
+    // Gain is calculated as the ratio of the current price to the average price expressed as a percentage.
+    // Example: If averagePriceInCents was 100 and sellPriceInCents (current price) is 110, the gain percentage is 10%.
+    // Example: If averagePriceInCents was 100 and sellPriceInCents (current price) is 90, the gain percentage is -10%.
+    // Example: If averagePriceInCents was 50 and sellPriceInCents (current price) is 100, the gain percentage is 100%.
     const gainPercentage =
-        (sellPriceInCents /
+        ((sellPriceInCents /
             position.averagePriceInCents) *
-        100;
+        100) - 100;
     strategyLogger('Checking if position is in the sell percentile', 'debug', {
         rawData: {
             mostRecentBarVolumeWeightedAveragePriceInDollarsWithFractionalCents,
